@@ -1,0 +1,62 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: predictor
+      POSTGRES_PASSWORD: predictor
+      POSTGRES_DB: predictor
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U predictor -d predictor"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Stand-in for the ML Inference Service until the real model container is
+  # ready. Same /predict contract, so swapping the image is all that's
+  # needed later (see inference_stub/main.py for the wiring note).
+  inference:
+    build: ./backend/inference_stub
+    ports:
+      - "8001:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    env_file:
+      - ./backend/.env.example
+    environment:
+      APP_DATABASE_URL: postgresql+asyncpg://predictor:predictor@postgres:5432/predictor
+      APP_REDIS_URL: redis://redis:6379/0
+      APP_INFERENCE_URL: http://inference:8000/predict
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      inference:
+        condition: service_healthy
+
+volumes:
+  pgdata:
