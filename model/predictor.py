@@ -39,7 +39,7 @@ class DelayPredictor:
         self.sched: dict = {}
         self._raw: dict[int, pd.DataFrame] = {}
 
-    def load_schedule(self, path: str | Path) -> None:
+    def load_schedule(self, path: str | Path | pd.DataFrame) -> None:
         """Planned schedule CSV: tr_id, time_begin, tt_action_item_id, manual_fill, geom (POINT)."""
         self.sched = load_schedule(path)
 
