@@ -1,14 +1,13 @@
 import { RiskLevel } from "@/domain/types";
 
-const RISK_COLOR: Record<RiskLevel | "unknown", string> = {
-  unknown: "#5a9ab2",
-  low: "#58b928",
-  medium: "#e5ba11",
-  high: "#ce3842"
+const RISK_COLOR: Record<RiskLevel, string> = {
+  low: "#30d158",
+  medium: "#ffd60a",
+  high: "#ff453a"
 };
 
 interface Props {
-  risk: RiskLevel | "unknown";
+  risk: RiskLevel;
   number: string;
 }
 
