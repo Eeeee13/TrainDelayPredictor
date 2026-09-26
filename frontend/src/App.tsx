@@ -4,6 +4,7 @@ import { KpiBar } from "@/components/KpiBar/KpiBar";
 import { BusMap } from "@/components/Map/BusMap";
 import { SidePanel } from "@/components/Sidebar/SidePanel";
 import { DrillDownPanel } from "@/components/DrillDown/DrillDownPanel";
+import mostransLogo from "@/assets/mostrans-logo.png";
 
 export default function App() {
   const init = useDashboardStore((s) => s.init);
@@ -22,8 +23,8 @@ export default function App() {
       {/* Top status + KPI bar */}
       <div className="pointer-events-none absolute top-4 left-4 right-4 z-30 flex justify-center">
         <div className="pointer-events-auto flex items-center gap-4 rounded-full bg-white/90 backdrop-blur-xl border border-gray-200 shadow-panel px-4 py-2.5">
-          <div className="flex items-center gap-2 pr-1 border-r border-gray-300">
-            <span className="h-1.5 w-1.5 rounded-full bg-risk-low animate-pulse" />
+          <div className="flex items-center gap-2 pr-2 border-r border-gray-300">
+              <img src={mostransLogo} alt="Mostrans" className="h-8" />
             <span className="text-[13px] font-semibold text-gray-800">Диспетчерская</span>
           </div>
           <KpiBar />
