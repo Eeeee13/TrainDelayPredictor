@@ -58,6 +58,8 @@ export interface Vehicle {
 
 export interface TrailPoint extends LatLng {
   risk: RiskLevel | null;
+  t: number;
+  gap?: boolean;
 }
 
 export interface DashboardFilters {

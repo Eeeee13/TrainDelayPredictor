@@ -44,6 +44,11 @@ function riskTrailFeatures(riskTrails: Record<string, TrailPoint[]>): GeoJSON.Fe
       });
     };
     for (let i = 1; i < points.length; i++) {
+      if (points[i].gap) {
+        flush(i - 1); // end the previous segment without connecting to the jump
+        segmentStart = i; // the jumped-to point starts a fresh, disconnected segment
+        continue;
+      }
       if (isProblemRisk(points[i - 1].risk) !== isProblemRisk(points[i].risk)) {
         flush(i);
         segmentStart = i; // shared boundary point keeps the line visually continuous
@@ -84,7 +89,9 @@ export function BusMap() {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const fittedVehicles = useRef("");
+  const followRef = useRef(false);
   const [zoom, setZoom] = useState(13);
+  const selectionToken = useDashboardStore((s) => s.selectionToken);
 
   const visible = useMemo(() => Object.values(vehicles).filter(v => {
     if (filters.routeIds && !filters.routeIds.includes(v.routeId)) return false;
@@ -111,12 +118,9 @@ export function BusMap() {
     map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
     map.on("zoom", () => setZoom(map.getZoom()));
+    map.on("dragstart", () => { followRef.current = false; });
+    // map.on("zoomstart", (e) => { if (e.originalEvent) followRef.current = false; }); // zoom will turn off following
     map.on("load", () => {
-      // Register vector bus icon images for each variant x risk-color combination.
-      // addImage must finish before the symbol layer that references these
-      // image ids is added — otherwise maplibre drops the icons or throws
-      // "styleimagemissing" on first paint. Wait on all of them explicitly
-      // instead of firing addLayer right after the (async) loop starts.
       const imagesReady: Promise<void>[] = [];
       VARIANTS.forEach((variant) => {
         (Object.keys(colors) as (RiskLevel | "unknown")[]).forEach((risk) => {
@@ -155,6 +159,11 @@ export function BusMap() {
           "line-opacity": ["case", ["get", "problem"], 0.95, 0.7]
         }
       });
+
+      map.on("click", "trails", e => { const id = e.features?.[0]?.properties?.vehicleId; if (id) selectVehicle(String(id)); });
+      map.on("mouseenter", "trails", () => { map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "trails", () => { map.getCanvas().style.cursor = ""; });
+
       map.addSource("vehicles", { type: "geojson", data: empty() });
       // Circle markers at low zoom — don't depend on the bus images, safe to add now
       map.addLayer({ id: "vehicle-halo", type: "circle", source: "vehicles", paint: { "circle-radius": 15, "circle-color": "#ffffff", "circle-opacity": 0.96 }, filter: ["<", ["zoom"], ICON_ZOOM_THRESHOLD] });
@@ -234,14 +243,25 @@ export function BusMap() {
         fittedVehicles.current = activeVehicles;
       }
       if (!visible.length) fittedVehicles.current = "";
+
+      // Live tracking
+      if (followRef.current && selected) {
+        const tracked = visible.find(v => v.id === selected);
+        if (tracked) map.easeTo({ center: [tracked.position.lng, tracked.position.lat], duration: 500 });
+      }
     };
     if (map.isStyleLoaded()) update(); else map.once("load", update);
   }, [visible, visibleRiskTrails, selected, zoom]);
 
   useEffect(() => {
-    const v = selected ? vehicles[selected] : null;
-    if (v) mapRef.current?.easeTo({ center: [v.position.lng, v.position.lat], zoom: Math.max(mapRef.current.getZoom(), 14), duration: 500 });
-  }, [selected, vehicles]);
+    const { selectedVehicleId, vehicles: currentVehicles } = useDashboardStore.getState();
+    if (!selectedVehicleId) { followRef.current = false; return; }
+    followRef.current = true;
+    const v = currentVehicles[selectedVehicleId];
+    if (v) mapRef.current?.easeTo({ center: [v.position.lng, v.position.lat], zoom: Math.max(mapRef.current?.getZoom() ?? 14, 14), duration: 500 });
+  }, [selectionToken]);
+
+  useEffect(() => { if (!selected) followRef.current = false; }, [selected]);
 
   return <div ref={container} className="absolute inset-0" aria-label="Карта транспорта" />;
 }
