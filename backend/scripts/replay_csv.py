@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import time
-from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -54,8 +53,7 @@ def main() -> None:
     dataset_start = telemetry[0].event_time
 
     client = httpx.Client(timeout=10)
-    moscow = ZoneInfo("Europe/Moscow")
-    r = client.post(f"{args.backend}/ingest/replay-clock", json={"start": dataset_start.replace(tzinfo=moscow).isoformat(), "speed": args.speed})
+    r = client.post(f"{args.backend}/ingest/replay-clock", json={"start": dataset_start.isoformat(), "speed": args.speed})
     r.raise_for_status()
 
     schedule_payload = {
@@ -64,7 +62,7 @@ def main() -> None:
                 "tr_id": s.tr_id,
                 "stop_id": s.stop_id,
                 "seq": s.seq,
-                "scheduled_time": s.scheduled_time.replace(tzinfo=moscow).isoformat(),
+                "scheduled_time": s.scheduled_time.isoformat(),
                 "latitude": s.latitude,
                 "longitude": s.longitude,
                 "manual_fill": s.manual_fill,
@@ -78,6 +76,8 @@ def main() -> None:
 
     batch: list[dict] = []
     last_event_time = telemetry[0].event_time
+    last_flush_wall = time.monotonic()
+    flush_interval_s = 2.0
     for record in telemetry:
         wait_s = (record.event_time - last_event_time).total_seconds() / args.speed
         if wait_s > 0:
@@ -87,7 +87,7 @@ def main() -> None:
         batch.append(
             {
                 "vehicle_id": record.vehicle_id,
-                "event_time": record.event_time.replace(tzinfo=moscow).isoformat(),
+                "event_time": record.event_time.isoformat(),
                 "latitude": record.latitude,
                 "longitude": record.longitude,
                 "speed": record.speed,
@@ -96,12 +96,16 @@ def main() -> None:
                 "location_valid": record.location_valid,
             }
         )
-        if len(batch) >= args.batch_size:
+        now_wall = time.monotonic()
+        if len(batch) >= args.batch_size or (batch and now_wall - last_flush_wall >= flush_interval_s):
             client.post(f"{args.backend}/ingest/telemetry", json={"records": batch}).raise_for_status()
+            print(f"telemetry flushed: {len(batch)} points (last event_time={last_event_time.isoformat()})")
             batch.clear()
+            last_flush_wall = now_wall
 
     if batch:
         client.post(f"{args.backend}/ingest/telemetry", json={"records": batch}).raise_for_status()
+        print(f"telemetry flushed: {len(batch)} points (final)")
 
     if args.pause_at_end:
         time.sleep(2)  # let the asynchronous telemetry worker drain the final batch
