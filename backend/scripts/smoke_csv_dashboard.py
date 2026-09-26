@@ -62,6 +62,11 @@ def main() -> None:
                     last_error = f"Inference fell back to {risk['source']}"
                     time.sleep(1)
                     continue
+                probability = risk.get("delay_probability")
+                if probability is None or not 0 <= probability <= 1:
+                    last_error = "Calibrated probability missing or invalid"
+                    time.sleep(1)
+                    continue
                 lead_s = _seconds_between(risk["target_time_begin"], risk["predicted_at"])
                 if not 600 < lead_s <= 900:
                     last_error = f"Forecast horizon outside (10, 15] minutes: {lead_s:.1f}s"
@@ -91,6 +96,7 @@ def main() -> None:
                     "route_stops_on_map": len(route["stops"]),
                     "risk_level": risk["risk_level"],
                     "predicted_delay_s": risk["predicted_delay_s"],
+                    "delay_probability": probability,
                     "prediction_source": risk["source"],
                     "lead_time_s": round(lead_s, 1),
                     "highlight_expected": risk["risk_level"] in ("medium", "high"),

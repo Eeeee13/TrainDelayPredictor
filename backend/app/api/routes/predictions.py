@@ -24,6 +24,7 @@ def _to_out(assessment) -> RiskAssessmentOut:
         reason=assessment.reason,
         source=assessment.source.value,
         confidence=assessment.confidence,
+        delay_probability=assessment.delay_probability,
     )
 
 

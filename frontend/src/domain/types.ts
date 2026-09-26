@@ -35,6 +35,7 @@ export interface RiskAssessment {
   target_time_begin: string;
   predicted_at: string;
   predicted_delay_s: number;
+  delay_probability?: number | null;
   risk_level: RiskLevel;
   source: string;
 }
@@ -49,6 +50,7 @@ export interface Vehicle {
   lastUpdate: string;
   delaySeconds: number | null;
   predictedDelaySeconds: number | null;
+  delayProbability: number | null;
   risk: RiskLevel | null;
   targetStopId: string | null;
   targetTime: string | null;

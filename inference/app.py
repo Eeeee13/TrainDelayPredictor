@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, text
 
 from model import DelayPredictor
@@ -39,6 +39,18 @@ class PredictBatch(BaseModel):
     items: list[PredictItem]
 
 
+class PredictOutputItem(BaseModel):
+    request_id: str
+    predicted_delay_s: float
+    confidence: float | None = None
+    delay_probability: float | None = Field(default=None, ge=0, le=1, description="Probability of delay strictly greater than 120 seconds at the target stop.")
+    model_version: str
+
+
+class PredictOutput(BaseModel):
+    items: list[PredictOutputItem]
+
+
 def _local_naive(value: dt.datetime) -> dt.datetime:
     return value.replace(tzinfo=dt.timezone.utc).astimezone(MOSCOW).replace(tzinfo=None) if value.tzinfo is None else value.astimezone(MOSCOW).replace(tzinfo=None)
 
@@ -65,12 +77,22 @@ def _model() -> tuple[DelayPredictor, str]:
             path, version = _active_path()
             if _predictor is None or version != _version:
                 candidate = DelayPredictor(path)
+                # Small batches do not benefit from taking every available CPU.
+                candidate.model.params["num_threads"] = 1
+                if candidate.probability is not None:
+                    candidate.probability.classifier.params["num_threads"] = 1
                 _predictor, _version = candidate, version
         except Exception:
             if _predictor is None:
                 raise
         assert _predictor is not None and _version is not None
         return _predictor, _version
+
+
+@app.on_event("startup")
+def load_initial_model() -> None:
+    # Load weights before accepting requests, outside the request timeout budget.
+    _model()
 
 
 def _frames(items: list[PredictItem]) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -108,10 +130,11 @@ def health() -> dict:
 @app.get("/model/info")
 def model_info() -> dict:
     model, version = _model()
-    return {"version": version, "features": model.model.feature_name()}
+    return {"version": version, "features": model.model.feature_name(),
+            "delay_probability_available": model.probability is not None, "delay_threshold_s": 120}
 
 
-@app.post("/predict")
+@app.post("/predict", response_model=PredictOutput)
 def predict(batch: PredictBatch) -> dict:
     if not batch.items:
         return {"items": []}
@@ -135,7 +158,8 @@ def predict(batch: PredictBatch) -> dict:
             "tr_id": i.tr_id, "T": _local_naive(i.T), "cur_dev_s": i.cur_dev_s,
             "target_stop_id": i.target_stop_id, "target_time_begin": _local_naive(i.target_time_begin),
         } for i in batch.items])
-        values = model.predict_points(points)
+        values, probabilities = model.predict_points_with_probability(points)
     return {"items": [{"request_id": item.request_id, "predicted_delay_s": float(value),
-                       "confidence": None, "model_version": version}
-                      for item, value in zip(batch.items, values)]}
+                       "confidence": None, "model_version": version,
+                       "delay_probability": None if probability is None else float(probability)}
+                      for item, value, probability in zip(batch.items, values, probabilities)]}

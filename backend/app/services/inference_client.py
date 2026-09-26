@@ -22,6 +22,19 @@ from app.domain.entities import PredictItem, PredictResult, PredictionSource
 logger = get_logger(__name__)
 
 
+def _probability(value):
+    if value is None:
+        return None
+    value = float(value)
+    if not 0 <= value <= 1:
+        raise ValueError("invalid delay_probability")
+    return value
+
+
+def _in_horizon(items):
+    return [i for i in items if 600 < (i.target_time_begin - i.T).total_seconds() <= 900]
+
+
 class InferenceClient(ABC):
     @abstractmethod
     async def predict_batch(self, items: list[PredictItem]) -> list[PredictResult]: ...
@@ -41,7 +54,7 @@ class HeuristicFallbackInferenceClient(InferenceClient):
                 confidence=None,
                 source=PredictionSource.FALLBACK,
             )
-            for item in items
+            for item in _in_horizon(items)
         ]
 
 
@@ -51,6 +64,7 @@ class HttpInferenceClient(InferenceClient):
         self._timeout_s = timeout_s
 
     async def predict_batch(self, items: list[PredictItem]) -> list[PredictResult]:
+        items = _in_horizon(items)
         if not items:
             return []
         payload = {
@@ -81,6 +95,7 @@ class HttpInferenceClient(InferenceClient):
                     confidence=row.get("confidence"),
                     source=PredictionSource.MODEL,
                     model_version=row.get("model_version"),
+                    delay_probability=_probability(row.get("delay_probability")),
                 )
             )
         return results
@@ -132,6 +147,7 @@ class ResilientInferenceClient(InferenceClient):
         self._breaker = _CircuitBreaker(fail_threshold, cooldown_s)
 
     async def predict_batch(self, items: list[PredictItem]) -> list[PredictResult]:
+        items = _in_horizon(items)
         if not items:
             return []
         if not self._breaker.allow():
@@ -145,9 +161,9 @@ class ResilientInferenceClient(InferenceClient):
                 return results
             except Exception as exc:  # noqa: BLE001 - any failure degrades, doesn't crash the pipeline
                 last_exc = exc
-                logger.warning("inference call failed (attempt %d/%d): %s", attempt + 1, self._max_retries + 1, exc)
+                logger.warning("inference call failed (attempt %d/%d): %s: %s", attempt + 1, self._max_retries + 1, type(exc).__name__, exc)
         self._breaker.record_failure()
-        logger.warning("inference degraded to heuristic fallback: %s", last_exc)
+        logger.warning("inference degraded to heuristic fallback: %s: %s", type(last_exc).__name__, last_exc)
         return await self._fallback.predict_batch(items)
 
 

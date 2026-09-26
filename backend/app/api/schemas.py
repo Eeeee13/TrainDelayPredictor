@@ -51,6 +51,7 @@ class RiskAssessmentOut(BaseModel):
     reason: str
     source: str
     confidence: float | None = None
+    delay_probability: float | None = Field(default=None, ge=0, le=1, description="Probability of delay strictly greater than 120 seconds at the target stop.")
 
 
 class VehicleDeviationOut(BaseModel):

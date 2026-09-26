@@ -39,6 +39,7 @@ class PredictionRepository:
         obj.reason = assessment.reason
         obj.source = assessment.source.value
         obj.confidence = assessment.confidence
+        obj.delay_probability = assessment.delay_probability
         await self._session.commit()
 
     async def append_log(self, log: PredictionLogORM) -> None:

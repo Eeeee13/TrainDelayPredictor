@@ -33,18 +33,21 @@ class ScheduleRepository:
         ]
         bind = self._session.get_bind()
         if bind.dialect.name == "postgresql":
-            stmt = pg_insert(ScheduleStopORM).values(rows)
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["tr_id", "stop_id"],
-                set_=dict(
-                    seq=stmt.excluded.seq,
-                    scheduled_time=stmt.excluded.scheduled_time,
-                    latitude=stmt.excluded.latitude,
-                    longitude=stmt.excluded.longitude,
-                    manual_fill=stmt.excluded.manual_fill,
-                ),
-            )
-            await self._session.execute(stmt)
+            # asyncpg allows at most 32767 bind parameters per statement.
+            # Nine columns per stop: 1000 rows stays comfortably below that limit.
+            for offset in range(0, len(rows), 1000):
+                stmt = pg_insert(ScheduleStopORM).values(rows[offset:offset + 1000])
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["tr_id", "stop_id"],
+                    set_=dict(
+                        seq=stmt.excluded.seq,
+                        scheduled_time=stmt.excluded.scheduled_time,
+                        latitude=stmt.excluded.latitude,
+                        longitude=stmt.excluded.longitude,
+                        manual_fill=stmt.excluded.manual_fill,
+                    ),
+                )
+                await self._session.execute(stmt)
         else:
             for row in rows:
                 existing = await self._session.execute(
