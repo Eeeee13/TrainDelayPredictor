@@ -28,7 +28,7 @@ export function SidePanel() {
               tab === "alerts" ? "bg-gray-300 text-gray-800" : "text-gray-600"
             }`}
           >
-            Маршруты N/A
+            Алерты
             {alerts.length > 0 && (
               <span className="ml-1.5 text-[10px] text-gray-600">{alerts.length}</span>
             )}
