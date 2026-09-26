@@ -17,21 +17,17 @@ interface Props {
 
 
 export function BusSideIcon({ risk, number, vehicleId }: Props) {
-  const color = RISK_COLOR[risk];
+  const color = RISK_COLOR[risk]; // was used before for colored icon gen
   const variant = getBusVariant(vehicleId);
   const busImage = variant === "v1" ? busV1Side : busV2Side;
 
   return (
-    <div className="relative" aria-label={`Bus ${number}`}>
+    <div className="relative overflow-hidden" aria-label={`Bus ${number}`}>
       <img 
         src={busImage} 
         alt={`Bus ${number}`} 
-        className="w-14 h-12 object-contain"
-      />
-      {/* Risk indicator dot */}
-      <div 
-        className="absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white" 
-        style={{ backgroundColor: color }}
+        className="w-14 h-12 object-contain translate-x-4 pointer-events-none"
+        style={{ transform: 'scaleX(1) translateX(-1.5rem) scale(1.5)' }}
       />
     </div>
   );
