@@ -56,23 +56,26 @@ def main() -> None:
     r = client.post(f"{args.backend}/ingest/replay-clock", json={"start": dataset_start.isoformat(), "speed": args.speed})
     r.raise_for_status()
 
-    schedule_payload = {
-        "stops": [
-            {
-                "tr_id": s.tr_id,
-                "stop_id": s.stop_id,
-                "seq": s.seq,
-                "scheduled_time": s.scheduled_time.isoformat(),
-                "latitude": s.latitude,
-                "longitude": s.longitude,
-                "manual_fill": s.manual_fill,
-            }
-            for s in schedule
-        ]
-    }
-    r = client.post(f"{args.backend}/ingest/schedule", json=schedule_payload)
-    r.raise_for_status()
-    print(f"schedule ingested: {r.json()}")
+    schedule_batch_size = 500
+    for i in range(0, len(schedule), schedule_batch_size):
+        batch = schedule[i:i + schedule_batch_size]
+        schedule_payload = {
+            "stops": [
+                {
+                    "tr_id": s.tr_id,
+                    "stop_id": s.stop_id,
+                    "seq": s.seq,
+                    "scheduled_time": s.scheduled_time.isoformat(),
+                    "latitude": s.latitude,
+                    "longitude": s.longitude,
+                    "manual_fill": s.manual_fill,
+                }
+                for s in batch
+            ]
+        }
+        r = client.post(f"{args.backend}/ingest/schedule", json=schedule_payload)
+        r.raise_for_status()
+        print(f"schedule ingested batch {i//schedule_batch_size + 1}: {r.json()}")
 
     batch: list[dict] = []
     last_event_time = telemetry[0].event_time
