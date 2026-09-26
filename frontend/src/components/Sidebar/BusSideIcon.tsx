@@ -2,7 +2,7 @@ import { RiskLevel } from "@/domain/types";
 
 const RISK_COLOR: Record<RiskLevel, string> = {
   low: "#30d158",
-  mid: "#ffd60a",
+  medium: "#ffd60a",
   high: "#ff453a"
 };
 

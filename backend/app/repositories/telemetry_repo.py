@@ -29,6 +29,7 @@ class TelemetryRepository:
                 speed=r.speed,
                 door_open=r.door_open,
                 tr_id=r.tr_id,
+                location_valid=r.location_valid,
             )
             for r in records
         ]

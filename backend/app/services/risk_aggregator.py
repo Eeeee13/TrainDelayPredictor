@@ -13,7 +13,7 @@ from app.core.config import settings
 from app.domain.entities import PredictItem, PredictResult, RiskAssessment, RiskLevel, VehicleState
 
 _STATIONARY_REASON_THRESHOLD_S = 90
-_LOW_SPEED_MS = 2.0
+_LOW_SPEED_KMH = 7.2
 
 
 class RiskAggregator:
@@ -38,7 +38,7 @@ class RiskAggregator:
                 stalled_s = (state.last_event_time - state.stationary_since).total_seconds()
             if stalled_s >= _STATIONARY_REASON_THRESHOLD_S:
                 return "длительная стоянка / простой"
-        if state.avg_speed_segment and state.avg_speed_segment < _LOW_SPEED_MS:
+        if state.avg_speed_segment and state.avg_speed_segment < _LOW_SPEED_KMH:
             return "аномальное снижение скорости"
         if predicted_delay_s >= self._medium:
             return "накопленное отставание от графика"

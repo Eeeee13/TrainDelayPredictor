@@ -7,6 +7,7 @@ export default defineConfig({
   resolve: {
     alias: { "@": path.resolve(__dirname, "src") }
   },
+  server: { host: "0.0.0.0", proxy: { "/dashboard": "http://localhost:8000", "/ws": { target: "ws://localhost:8000", ws: true } } },
   optimizeDeps: {
     exclude: ["maplibre-gl"]
   },

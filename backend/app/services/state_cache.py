@@ -34,7 +34,7 @@ class StateCache:
         return [
             v
             for v in self.vehicles.values()
-            if v.last_event_time is not None and (now - v.last_event_time).total_seconds() <= stale_after_s
+            if v.last_event_time is not None and 0 <= (now - v.last_event_time).total_seconds() <= stale_after_s
         ]
 
     # --- risk snapshot -----------------------------------------------------

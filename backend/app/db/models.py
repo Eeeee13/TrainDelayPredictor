@@ -28,6 +28,7 @@ class TelemetryRecordORM(Base):
     longitude: Mapped[float] = mapped_column(Float, nullable=False)
     speed: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     door_open: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    location_valid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     tr_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     ingested_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
 
@@ -49,6 +50,7 @@ class ScheduleStopORM(Base):
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     route_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     vehicle_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    manual_fill: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
 class RiskAssessmentORM(Base):
@@ -93,3 +95,4 @@ class PredictionLogORM(Base):
     predicted_delay_s: Mapped[float] = mapped_column(Float, nullable=False)
     source: Mapped[str] = mapped_column(String(16), nullable=False)
     is_safety_recompute: Mapped[bool] = mapped_column(Boolean, default=False)
+    model_version: Mapped[str | None] = mapped_column(String(128), nullable=True)

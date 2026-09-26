@@ -32,6 +32,7 @@ class TelemetryRecord:
     speed: float
     door_open: bool = False
     tr_id: int | None = None  # trip id, if the source already resolved it
+    location_valid: bool = True
 
 
 @dataclass(slots=True, frozen=True)
@@ -44,6 +45,7 @@ class ScheduleStop:
     scheduled_time: datetime
     latitude: float | None = None
     longitude: float | None = None
+    manual_fill: bool = False
 
 
 @dataclass(slots=True)
@@ -89,6 +91,7 @@ class PredictResult:
     predicted_delay_s: float
     confidence: float | None
     source: PredictionSource
+    model_version: str | None = None
 
 
 @dataclass(slots=True, frozen=True)

@@ -99,21 +99,25 @@ class RedisStreamsEventBus:
         await self._ensure_group(topic)
         consumer_name = f"c-{id(self)}"
         while True:
-            resp = await self._redis.xreadgroup(
-                groupname=self._group,
-                consumername=consumer_name,
-                streams={topic: ">"},
-                count=100,
-                block=2000,
-            )
+            # A crashed consumer leaves unacknowledged entries in the group.
+            pending = await self._redis.xautoclaim(topic, self._group, consumer_name,
+                                                   min_idle_time=5000, start_id="0-0", count=100)
+            if pending[1]:
+                resp = [(topic, pending[1])]
+            else:
+                resp = await self._redis.xreadgroup(
+                    groupname=self._group,
+                    consumername=consumer_name,
+                    streams={topic: ">"},
+                    count=100,
+                    block=2000,
+                )
             if not resp:
                 continue
             for _stream, entries in resp:
                 for entry_id, fields in entries:
-                    try:
-                        yield json.loads(fields["data"])
-                    finally:
-                        await self._redis.xack(topic, self._group, entry_id)
+                    yield json.loads(fields["data"])
+                    await self._redis.xack(topic, self._group, entry_id)
 
 
 async def build_event_bus(redis_url: str | None, use_redis: bool) -> EventBus:

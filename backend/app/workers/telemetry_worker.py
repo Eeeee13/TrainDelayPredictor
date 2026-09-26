@@ -13,6 +13,7 @@ import logging
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bus.event_bus import TOPIC_FEATURES, TOPIC_TELEMETRY, EventBus
+from app.core.time import utc_naive
 from app.domain.entities import TelemetryRecord
 from app.repositories.schedule_repo import ScheduleRepository
 from app.repositories.telemetry_repo import TelemetryRepository
@@ -38,21 +39,25 @@ class TelemetryWorker:
         self._trip_stops_ttl_s = 30
 
     async def run_forever(self) -> None:
-        async for payload in self._bus.subscribe(TOPIC_TELEMETRY):
+        import asyncio
+        while True:
             try:
-                await self._handle(payload)
-            except Exception:  # noqa: BLE001 - one bad packet must not kill the consumer loop
-                logger.exception("failed to process telemetry payload: %s", payload)
+                async for payload in self._bus.subscribe(TOPIC_TELEMETRY):
+                    await self._handle(payload)
+            except Exception:
+                logger.exception("telemetry consumer failed; retrying unacknowledged messages")
+                await asyncio.sleep(1)
 
     async def _handle(self, payload: dict) -> None:
         record = TelemetryRecord(
             vehicle_id=payload["vehicle_id"],
-            event_time=dt.datetime.fromisoformat(payload["event_time"]),
+            event_time=utc_naive(dt.datetime.fromisoformat(payload["event_time"])),
             latitude=payload["latitude"],
             longitude=payload["longitude"],
             speed=payload.get("speed", 0.0),
             door_open=payload.get("door_open", False),
             tr_id=payload.get("tr_id"),
+            location_valid=payload.get("location_valid", True),
         )
 
         async with self._session_factory() as session:
@@ -60,6 +65,8 @@ class TelemetryWorker:
             trip_stops = await self._get_trip_stops(session, record.tr_id) if record.tr_id else []
 
         prev = self._state.get_vehicle(record.vehicle_id)
+        if prev is not None and prev.last_event_time is not None and record.event_time <= prev.last_event_time:
+            return
         new_state = self._matching.update(prev, record, trip_stops)
         self._state.put_vehicle(new_state)
 

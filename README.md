@@ -17,9 +17,8 @@ Aggregator, REST + WebSocket для дашборда. Postgres как БД, со
    чтобы стенд поднимался и демонстрировался end-to-end уже сейчас; когда
    будет готов реальный образ модели — просто подменяется build-контекст
    сервиса `inference` в `docker-compose.yml`.
-3. **BI-дашборд** — не реализован в этом репозитории (backend-only задача
-   по вашей формулировке); контракт для него готов: `GET /risk` для
-   первичной загрузки + `ws://.../ws/risk` для live-обновлений.
+3. **BI-дашборд** (`frontend/`) — карта и список транспорта из `GET /dashboard/snapshot`,
+   live-обновления через `ws://.../ws/risk`.
 
 ---
 
@@ -148,41 +147,6 @@ python -m scripts.replay_csv --traffic traffic.csv --schedule schedule.csv \
 
 ---
 
-## Документация API / кода
-
-```bash
-open http://localhost:8000/docs        # Swagger UI (FastAPI, автогенерация)
-open http://localhost:8000/redoc       # ReDoc
-
-pip install sphinx
-sphinx-build -b html backend/docs backend/docs/_build   # PyDoc/Sphinx (см. ниже)
-```
-
-> В этой сборке присутствует код с докстрингами по каждому модулю
-> (`app/domain`, `app/services`, `app/repositories`, `app/api`), но
-> `docs/` со сконфигурированным Sphinx-проектом в этот заход не входит —
-> добавляется типовым `sphinx-quickstart` с `autodoc`/`napoleon`
-> extensions, указывающими на `backend/app`.
-
----
-
-## Тесты
-
-```bash
-cd backend
-pytest            # 18 тестов: unit (matching engine, inference client,
-                   # risk aggregator, prediction scheduler) + API smoke-тесты
-pytest --cov=app
-```
-
-Тесты работают на изолированной in-memory SQLite (async, `aiosqlite`) и
-in-process шине событий — без Docker, Postgres или Redis; ORM-модели
-идентичны тем, что используются с Postgres в проде (никаких
-диалект-специфичных типов в `app/db/models.py`), поэтому это честная
-проверка бизнес-логики, а не только "оно импортируется".
-
----
-
 ## Архитектура и структура кода
 
 ```
@@ -204,46 +168,82 @@ backend/
   tests/            # pytest: unit + API smoke-тесты
 ```
 
-**Применённые паттерны (без фанатизма — только там, где реально меняется
-поведение):**
-
-- **Strategy + Decorator** — `HttpInferenceClient` /
-  `HeuristicFallbackInferenceClient`, скомпонованные в
-  `ResilientInferenceClient` (единственное место, где полиморфизм реально
-  нужен: реализация ML-клиента меняется по конфигу/обстоятельствам).
-- **Repository** — `TelemetryRepository`/`ScheduleRepository`/`PredictionRepository`
-  инкапсулируют SQLAlchemy; домен и сервисы не знают, что БД — Postgres.
-- **Composition root / DI** — `app/core/container.py`: все зависимости
-  собираются в одном месте и раздаются через `FastAPI.Depends`, а не
-  создаются по месту использования.
-- **Single Responsibility** — каждый сервис (`MatchingEngine`,
-  `FeatureBuilder`, `PredictionScheduler`, `RiskAggregator`,
-  `WebSocketHub`) отвечает ровно за одну вещь; `PredictionScheduler` —
-  единственный оркестратор, а не размазанная по роутам логика.
-
-Сознательно **не** введено: абстрактных портов для БД (один Repository на
-таблицу — этого достаточно, лишний интерфейс не даст переносимости,
-которая реально нужна), generic message-broker обёртки (нужны ровно
-`publish`/`subscribe`, не universal pub-sub framework), отдельного слоя
-UseCase/CQRS — при таком размере сервиса это добавило бы файлы, а не
-понятность.
-
-## Что реализовано / что за рамками backend-задачи
-
-Реализовано: приём и нормализация телеметрии/расписания, Matching Engine,
-календарный планировщик обращений к ML со strict-horizon и safety-net,
-устойчивый ML-клиент с деградацией, Risk Aggregator с порогами,
-REST + WebSocket API, событийная шина с топиками
-telemetry/features/predictions/alerts, Docker Compose, тесты.
-
-Не реализовано (по вашей формулировке — не входит в backend-задачу):
-собственно ML-модель (используется `inference_stub` до готовности вашего
-образа — просто передайте нам контейнер с тем же `/predict`-контрактом),
-парсер бинарного NDTP (входная точка для него —
-`app/adapters/`/`POST /ingest/telemetry`, изолирована от остального
-пайплайна), React-дашборд (backend отдаёт всё через REST/WebSocket,
-вёрстка не входит в объём).
-
 ## Лицензии сторонних материалов
 
 См. `LICENSES.md`.
+
+## Запуск системы
+
+Нужен Docker Compose и локальная папка распакованного датасета. Перед запуском задайте абсолютный путь:
+
+```bash
+export DATASET_PATH=/absolute/path/to/dataset
+export NDTP_UNIT_MAP='{"985940":131672,"893159":122048,"896671":130072}'
+docker compose up --build
+```
+
+Frontend: `http://localhost:3000`; backend API и Swagger: `http://localhost:8000/docs`; ML API: `http://localhost:8001/docs`; Airflow: `http://localhost:8080`. PostgreSQL и Redis запускаются вместе с ними. При первом старте Airflow `standalone` выводит пароль администратора в свои логи. DAG `delay_retraining` запускается каждые пять минут и допускает ручной запуск.
+
+### Исторический replay
+
+После запуска сервисов:
+
+```bash
+docker compose exec backend python -m scripts.replay_csv \
+  --schedule /dataset/train/schedule.csv \
+  --traffic /dataset/train/traffic.csv \
+  --backend http://localhost:8000 --speed 30
+```
+
+Replay сохраняет даты датасета и выставляет виртуальные часы backend; входные времена отправляются с московским часовым поясом. Откройте `GET /risk` либо WebSocket `/ws/risk` для прогнозов. В ML API `GET /model/info` показывает текущую версию.
+
+### Эмулятор NDTP
+
+TCP-приёмник backend слушает порт `9201`. Задайте в окружении backend `APP_NDTP_UNIT_MAP` как JSON: ключ — `unitId` эмулятора, значение — `tr_id` транспортного средства. Пример выше использует реальные пары из `traffic.csv`: `985940 → 131672`, `893159 → 122048`, `896671 → 130072`. Те же `unitId` укажите в `POST /api/config` эмулятора с `targetHost=host.docker.internal`, `targetPort=9201`. Эмулятор с `autoGenerate: true` создаёт случайное движение около Москвы; это проверка живого приёма и GPS-трека, а не воспроизведение маршрута из CSV. Для прогноза нужны согласованные с текущим временем плановые остановки в ближайшие 10–15 минут и телеметрия вдоль их маршрута. Исторические факты для обучения поступают через Airflow, поскольку эмулятор их не передаёт.
+
+### Модель и переобучение
+
+Сервис inference читает телеметрию и плановые остановки из PostgreSQL с ролью `inference_ro`, у которой есть только `SELECT`. В начале он использует `model/model.txt`. Airflow постепенно открывает исторические записи `train`, строит признаки готовым кодом `training/train.py`, оценивает кандидата на неизменном `test` и при улучшении записывает `active.json` в общий volume. Сервис подхватывает новую модель при следующем запросе; при ошибке загрузки продолжает использовать предыдущую. Список артефактов версий находится в volume `models`. Для отката на существующую версию: `docker compose exec airflow python -m ml_pipeline.rollback VERSION`.
+
+Для прямой проверки ML API отправьте `POST http://localhost:8001/predict` в формате:
+
+```json
+{"items":[{"request_id":"demo-1","tr_id":131672,"T":"2026-01-06T00:35:00Z","cur_dev_s":274,"target_stop_id":53700172828,"target_time_begin":"2026-01-06T00:50:00Z"}]}
+```
+
+Времена API и БД — UTC. В исторических CSV время московское, без явного часового пояса; адаптер replay помечает его `Europe/Moscow`. Для расчёта признаков ML-сервис переводит UTC обратно в московское локальное время.
+
+## Диспетчерский интерфейс
+
+После `docker compose up --build` откройте `http://localhost:3000`. Frontend
+раздаётся Nginx, который проксирует `/dashboard/snapshot` и `/ws/risk` в backend.
+Карта показывает активные ТС и их пройденный за последние 30 минут путь по
+валидным GPS-точкам. Пунктиром выделяется приблизительный участок до целевой
+остановки при среднем и высоком риске: точной геометрии улиц в CSV нет.
+Старые точки и прогнозы скрываются.
+
+Доступны поиск по борту/маршруту, выбор маршрута, фильтр уровня риска и
+переключатель «С прогнозом». Для разработки: `cd frontend && npm ci && npm run dev`;
+Vite проксирует запросы к backend на `localhost:8000`.
+
+### Сквозная проверка на реальном CSV
+
+Локальный `.env` должен содержать `DATASET_PATH` — абсолютный путь к каталогу
+с `train/schedule.csv` и `train/traffic.csv`. Затем:
+
+```bash
+docker compose up -d --build backend frontend
+docker compose exec backend python -m scripts.smoke_csv_dashboard \
+  --schedule /dataset/train/schedule.csv \
+  --traffic /dataset/train/traffic.csv \
+  --vehicle 133300 \
+  --start-at 2026-01-06T17:45:00 \
+  --end-at 2026-01-06T18:25:00 \
+  --speed 60
+```
+
+Скрипт воспроизводит настоящий 40-минутный фрагмент с виртуальными часами,
+проверяет ответ модели, горизонт прогноза и наличие ТС, GPS-пути и целевой
+остановки в ответе фронтенда. При успехе печатает JSON с `status: passed`.
+После replay виртуальные часы останавливаются, чтобы карту можно было изучить.
+Для возврата к текущему времени: `curl -X POST http://localhost:8000/ingest/replay-clock/resume-live`.

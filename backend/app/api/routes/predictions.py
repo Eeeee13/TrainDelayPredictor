@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.api.deps import get_container
 from app.api.schemas import RecomputeResult, RiskAssessmentOut
 from app.core.container import Container
+from app.core.clock import clock
 
 router = APIRouter(tags=["predictions"])
 
@@ -49,5 +50,5 @@ async def recompute(container: Container = Depends(get_container)) -> RecomputeR
     tick - mainly useful for demos and for the jury to see the pipeline
     react on demand.
     """
-    made = await container.scheduler.tick(dt.datetime.utcnow())
+    made = await container.scheduler.tick(clock.now())
     return RecomputeResult(predictions_made=made)

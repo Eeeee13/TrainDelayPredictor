@@ -97,3 +97,17 @@ async def test_safety_recompute_refreshes_high_risk_pair(sqlite_session_factory)
     scheduler._last_safety_pass = now - dt.timedelta(seconds=61)
     second = await scheduler.tick(now + dt.timedelta(seconds=2))
     assert second == 1  # high-risk pair gets refreshed by the safety net
+
+
+async def test_selects_first_stop_in_strict_horizon(sqlite_session_factory):
+    now = dt.datetime.utcnow()
+    async with sqlite_session_factory() as session:
+        await ScheduleRepository(session).bulk_upsert([
+            ScheduleStop(tr_id=1, stop_id=101, seq=1, scheduled_time=now + dt.timedelta(minutes=2)),
+            ScheduleStop(tr_id=1, stop_id=102, seq=2, scheduled_time=now + dt.timedelta(minutes=12)),
+            ScheduleStop(tr_id=1, stop_id=103, seq=3, scheduled_time=now + dt.timedelta(minutes=14)),
+        ])
+    scheduler = await _make_scheduler(sqlite_session_factory)
+    scheduler._state.put_vehicle(VehicleState(vehicle_id="bus-1", tr_id=1, cur_dev_s=100, last_event_time=now))
+    assert await scheduler.tick(now) == 1
+    assert scheduler._state.get_risk("bus-1").target_stop_id == 102

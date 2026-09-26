@@ -13,6 +13,7 @@ class TelemetryRecordIn(BaseModel):
     speed: float = 0.0
     door_open: bool = False
     tr_id: int | None = None
+    location_valid: bool = True
 
 
 class TelemetryBatchIn(BaseModel):
@@ -26,6 +27,7 @@ class ScheduleStopIn(BaseModel):
     scheduled_time: dt.datetime
     latitude: float | None = None
     longitude: float | None = None
+    manual_fill: bool = False
 
 
 class ScheduleBatchIn(BaseModel):

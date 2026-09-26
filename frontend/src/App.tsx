@@ -8,32 +8,23 @@ import { DrillDownPanel } from "@/components/DrillDown/DrillDownPanel";
 export default function App() {
   const init = useDashboardStore((s) => s.init);
   const selectedVehicleId = useDashboardStore((s) => s.selectedVehicleId);
-  const theme = useDashboardStore((s) => s.theme);
 
   useEffect(() => {
     const unsubscribe = init();
     return unsubscribe;
   }, [init]);
 
-  useEffect(() => {
-    if (theme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-  }, [theme]);
-
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-base-950 dark:bg-base-950 bg-base-50">
+    <div className="relative h-screen w-screen overflow-hidden bg-base-50">
       {/* Map fills the entire viewport — every other element floats above it. */}
       <BusMap />
 
       {/* Top status + KPI bar */}
       <div className="pointer-events-none absolute top-4 left-4 right-4 z-30 flex justify-center">
-        <div className="pointer-events-auto flex items-center gap-4 rounded-full bg-base-900/75 dark:bg-base-900/75 bg-white/90 backdrop-blur-xl border border-white/[0.06] dark:border-white/[0.06] border-gray-200 shadow-panel px-4 py-2.5">
-          <div className="flex items-center gap-2 pr-1 border-r border-base-700/60 dark:border-base-700/60 border-gray-300">
+        <div className="pointer-events-auto flex items-center gap-4 rounded-full bg-white/90 backdrop-blur-xl border border-gray-200 shadow-panel px-4 py-2.5">
+          <div className="flex items-center gap-2 pr-1 border-r border-gray-300">
             <span className="h-1.5 w-1.5 rounded-full bg-risk-low animate-pulse" />
-            <span className="text-[13px] font-semibold text-base-200 dark:text-base-200 text-gray-800">Диспетчерская</span>
+            <span className="text-[13px] font-semibold text-gray-800">Диспетчерская</span>
           </div>
           <KpiBar />
         </div>

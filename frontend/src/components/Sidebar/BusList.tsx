@@ -5,7 +5,6 @@ import { BusCard } from "./BusCard";
 export function BusList() {
   const vehicles = useDashboardStore((s) => s.vehicles);
   const routes = useDashboardStore((s) => s.routes);
-  const selectedRouteId = useDashboardStore((s) => s.selectedRouteId);
   const selectedVehicleId = useDashboardStore((s) => s.selectedVehicleId);
   const filters = useDashboardStore((s) => s.filters);
   const selectVehicle = useDashboardStore((s) => s.selectVehicle);
@@ -15,13 +14,14 @@ export function BusList() {
   const list = useMemo(() => {
     return Object.values(vehicles)
       .filter((v) => {
-        if (selectedRouteId && v.routeId !== selectedRouteId) return false;
-        if (filters.riskLevels && !filters.riskLevels.includes(v.risk)) return false;
-        if (filters.depots && !filters.depots.includes(v.depot)) return false;
-        return true;
+        if (filters.routeIds && !filters.routeIds.includes(v.routeId)) return false;
+        if (filters.riskLevels && (!v.risk || !filters.riskLevels.includes(v.risk))) return false;
+        if (filters.onlyPredicted && v.predictedDelaySeconds === null) return false;
+        const q = filters.query.trim().toLowerCase();
+        return !q || `${v.id} ${v.garageNumber} ${v.routeId}`.toLowerCase().includes(q);
       })
-      .sort((a, b) => b.predictedDelaySeconds - a.predictedDelaySeconds);
-  }, [vehicles, selectedRouteId, filters]);
+      .sort((a, b) => (b.predictedDelaySeconds ?? -Infinity) - (a.predictedDelaySeconds ?? -Infinity));
+  }, [vehicles, filters]);
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -36,8 +36,8 @@ export function BusList() {
           />
         ))}
         {list.length === 0 && (
-          <div className="text-sm text-base-400 dark:text-base-400 text-gray-600 px-3 py-6 text-center">
-            Нет автобусов по текущим фильтрам
+          <div className="text-sm text-gray-600 px-3 py-6 text-center">
+            Транспорт по выбранным фильтрам не найден
           </div>
         )}
       </div>

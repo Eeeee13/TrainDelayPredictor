@@ -6,11 +6,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import health, ingestion, predictions, vehicles, websocket
+from app.api.routes import dashboard, health, ingestion, predictions, vehicles, websocket
 from app.core.config import settings
 from app.core.container import build_container
 from app.core.logging import configure_logging, get_logger
 from app.db.session import dispose_engine, init_db
+from app.ndtp.server import serve
 
 logger = get_logger(__name__)
 
@@ -23,6 +24,7 @@ async def lifespan(app: FastAPI):
     await init_db()
     container = await build_container()
     app.state.container = container
+    ndtp_server = await serve(container.event_bus)
 
     tasks = [
         asyncio.create_task(container.telemetry_worker.run_forever(), name="telemetry-worker"),
@@ -32,6 +34,8 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        ndtp_server.close()
+        await ndtp_server.wait_closed()
         container.scheduler.stop()
         for t in tasks:
             t.cancel()
@@ -52,6 +56,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(dashboard.router)
 app.include_router(ingestion.router)
 app.include_router(vehicles.router)
 app.include_router(predictions.router)

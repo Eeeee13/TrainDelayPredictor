@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bus.event_bus import TOPIC_ALERTS, TOPIC_PREDICTIONS, EventBus
 from app.core.config import settings
+from app.core.clock import clock
 from app.db.models import PredictionLogORM
 from app.domain.entities import RiskLevel, ScheduleStop, VehicleState
 from app.repositories.prediction_repo import PredictionRepository
@@ -75,17 +76,17 @@ class PredictionScheduler:
         self._risk = risk_aggregator
         self._bus = event_bus
         self._ws = ws_hub
-        self._last_safety_pass = dt.datetime.min
+        self._last_safety_pass: dt.datetime | None = None
         self._running = False
 
     async def run_forever(self) -> None:
         self._running = True
         while self._running:
             try:
-                await self.tick(dt.datetime.utcnow())
+                await self.tick(clock.now())
             except Exception:  # noqa: BLE001 - the tick loop must never die
                 logger.exception("prediction scheduler tick failed")
-            await self._sleep(settings.scheduler_tick_s)
+            await self._sleep(max(0.05, clock.real_seconds(settings.scheduler_tick_s)))
 
     async def _sleep(self, seconds: float) -> None:
         import asyncio
@@ -99,7 +100,10 @@ class PredictionScheduler:
         """Runs one scheduling pass. Returns the number of predictions made
         (exposed so `/risk/recompute` and tests can assert on it).
         """
-        due_safety_pass = (now - self._last_safety_pass).total_seconds() >= settings.safety_recompute_interval_s
+        due_safety_pass = (
+            self._last_safety_pass is None
+            or (now - self._last_safety_pass).total_seconds() >= settings.safety_recompute_interval_s
+        )
 
         async with self._session_factory() as session:
             schedule_repo = ScheduleRepository(session)
@@ -145,6 +149,7 @@ class PredictionScheduler:
                         predicted_delay_s=result.predicted_delay_s,
                         source=result.source.value,
                         is_safety_recompute=candidate.is_safety_recompute,
+                        model_version=result.model_version,
                     )
                 )
 
@@ -171,27 +176,33 @@ class PredictionScheduler:
             stops = trip_stops.get(state.tr_id)
             if not stops:
                 continue
-            target = self._matching.next_target(state, stops)
-            if target is None:
-                continue
-
-            remaining_s = (target.scheduled_time - now).total_seconds()
-            if remaining_s <= 0:
-                # event already happened - never issue a "prediction" for
-                # the past (anti-leakage / no after-the-fact alerts).
-                continue
-
-            pair_done = self._state.already_predicted(state.tr_id, target.stop_id)
-
-            if not pair_done:
-                in_window = settings.horizon_min_s <= remaining_s <= settings.horizon_max_s
-                missed_but_salvageable = remaining_s < settings.horizon_min_s and remaining_s >= settings.late_fire_floor_s
-                if in_window or missed_but_salvageable:
+            in_window = sorted(
+                (s for s in stops if settings.horizon_min_s < (s.scheduled_time - now).total_seconds()
+                 <= settings.horizon_max_s),
+                key=lambda s: (s.scheduled_time, s.seq),
+            )
+            if in_window:
+                target = in_window[0]
+                pair_done = self._state.already_predicted(state.tr_id, target.stop_id)
+                if not pair_done:
                     candidates.append(_Candidate(state, target, is_safety_recompute=False))
+                elif due_safety_pass:
+                    risk = self._state.get_risk(state.vehicle_id)
+                    if risk is not None and risk.risk_level == RiskLevel.HIGH and risk.target_stop_id == target.stop_id:
+                        candidates.append(_Candidate(state, target, is_safety_recompute=True))
                 continue
 
-            if due_safety_pass:
-                risk = self._state.get_risk(state.vehicle_id)
-                if risk is not None and risk.risk_level == RiskLevel.HIGH and risk.target_stop_id == target.stop_id:
-                    candidates.append(_Candidate(state, target, is_safety_recompute=True))
+            # Missed-window fallback (see module docstring): a telemetry gap
+            # can make a vehicle skip past the ideal [10,15] min window
+            # without ever getting its "first" prediction for a stop. Fire
+            # once for the nearest still-unpredicted stop, as long as the
+            # event genuinely hasn't happened yet.
+            late = sorted(
+                (s for s in stops
+                 if settings.late_fire_floor_s <= (s.scheduled_time - now).total_seconds() <= settings.horizon_min_s
+                 and not self._state.already_predicted(state.tr_id, s.stop_id)),
+                key=lambda s: (s.scheduled_time, s.seq),
+            )
+            if late:
+                candidates.append(_Candidate(state, late[0], is_safety_recompute=False))
         return candidates

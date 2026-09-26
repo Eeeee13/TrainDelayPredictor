@@ -27,6 +27,7 @@ class ScheduleRepository:
                 longitude=s.longitude,
                 route_id=route_id,
                 vehicle_id=vehicle_id,
+                manual_fill=s.manual_fill,
             )
             for s in stops
         ]
@@ -40,6 +41,7 @@ class ScheduleRepository:
                     scheduled_time=stmt.excluded.scheduled_time,
                     latitude=stmt.excluded.latitude,
                     longitude=stmt.excluded.longitude,
+                    manual_fill=stmt.excluded.manual_fill,
                 ),
             )
             await self._session.execute(stmt)
@@ -78,6 +80,7 @@ class ScheduleRepository:
                 scheduled_time=row.scheduled_time,
                 latitude=row.latitude,
                 longitude=row.longitude,
+                manual_fill=row.manual_fill,
             )
             for row in result.scalars().all()
         ]
@@ -94,6 +97,7 @@ class ScheduleRepository:
                 scheduled_time=row.scheduled_time,
                 latitude=row.latitude,
                 longitude=row.longitude,
+                manual_fill=row.manual_fill,
             )
             for row in result.scalars().all()
         ]

@@ -80,6 +80,7 @@ class HttpInferenceClient(InferenceClient):
                     predicted_delay_s=float(row["predicted_delay_s"]),
                     confidence=row.get("confidence"),
                     source=PredictionSource.MODEL,
+                    model_version=row.get("model_version"),
                 )
             )
         return results

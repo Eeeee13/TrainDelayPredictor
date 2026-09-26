@@ -19,7 +19,7 @@ from app.core.config import settings
 from app.domain.entities import ScheduleStop, TelemetryRecord, VehicleState
 from app.services.geo import haversine_m
 
-_STATIONARY_SPEED_MS = 0.5  # below this, consider the vehicle stopped
+_STATIONARY_SPEED_KMH = 2.0  # telemetry speed is in km/h
 
 
 class MatchingEngine:
@@ -40,12 +40,12 @@ class MatchingEngine:
             telemetry.speed if state.avg_speed_segment == 0.0 else alpha * telemetry.speed + (1 - alpha) * state.avg_speed_segment
         )
 
-        if telemetry.speed <= _STATIONARY_SPEED_MS:
+        if telemetry.location_valid and telemetry.speed <= _STATIONARY_SPEED_KMH:
             state.stationary_since = state.stationary_since or telemetry.event_time
         else:
             state.stationary_since = None
 
-        matched = self._match_stop(telemetry, trip_stops, state.last_matched_seq)
+        matched = self._match_stop(telemetry, trip_stops, state.last_matched_seq) if telemetry.location_valid else None
         if matched is not None:
             deviation = (telemetry.event_time - matched.scheduled_time).total_seconds()
             state.cur_dev_s = int(round(deviation))
@@ -55,8 +55,9 @@ class MatchingEngine:
 
         state.tr_id = telemetry.tr_id or state.tr_id
         state.last_event_time = telemetry.event_time
-        state.last_lat = telemetry.latitude
-        state.last_lon = telemetry.longitude
+        if telemetry.location_valid:
+            state.last_lat = telemetry.latitude
+            state.last_lon = telemetry.longitude
         state.last_speed = telemetry.speed
         state.updated_at = telemetry.event_time
         return state
@@ -68,7 +69,8 @@ class MatchingEngine:
         vehicle can't be re-matched to a stop it already passed just
         because it's geographically close again later (loop routes).
         """
-        candidates = [s for s in trip_stops if s.seq > last_matched_seq and s.latitude is not None]
+        candidates = [s for s in trip_stops if s.seq > last_matched_seq and s.latitude is not None
+                      and abs((s.scheduled_time - telemetry.event_time).total_seconds()) <= 12 * 60]
         best: ScheduleStop | None = None
         best_dist = self._radius_m
         for stop in candidates:
