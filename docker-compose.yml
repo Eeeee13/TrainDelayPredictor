@@ -1,0 +1,93 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: predictor
+      POSTGRES_PASSWORD: predictor
+      POSTGRES_DB: predictor
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U predictor -d predictor"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  inference:
+    build:
+      context: .
+      dockerfile: inference/Dockerfile
+    environment:
+      INFERENCE_DATABASE_URL: postgresql+psycopg://inference_ro:inference_ro@postgres:5432/predictor
+      MODEL_DIR: /models
+    volumes:
+      - models:/models:ro
+    ports:
+      - "8001:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+  backend:
+    build: ./backend
+    env_file:
+      - ./backend/.env.example
+    volumes:
+      - ${DATASET_PATH:-./dataset}:/dataset:ro
+    environment:
+      APP_DATABASE_URL: postgresql+asyncpg://predictor:predictor@postgres:5432/predictor
+      APP_REDIS_URL: redis://redis:6379/0
+      APP_INFERENCE_URL: http://inference:8000/predict
+      APP_NDTP_UNIT_MAP: ${NDTP_UNIT_MAP:-{}}
+    ports:
+      - "8000:8000"
+      - "9201:9201"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      inference:
+        condition: service_started
+
+  airflow:
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
+    command: standalone
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      DATASET_DIR: /dataset
+      MODEL_DIR: /models
+      PIPELINE_WORK_DIR: /pipeline-work
+      TRAIN_REPLAY_SPEED: "6"
+    volumes:
+      - ${DATASET_PATH:-./dataset}:/dataset:ro
+      - models:/models
+      - pipeline-work:/pipeline-work
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:
+  models:
+  pipeline-work:

@@ -80,7 +80,8 @@ def load_traffic(path, clean=True):
 
 
 def load_schedule(path):
-    s = pd.read_csv(path, parse_dates=["time_begin"])
+    s = path.copy() if isinstance(path, pd.DataFrame) else pd.read_csv(path, parse_dates=["time_begin"])
+    s["time_begin"] = pd.to_datetime(s["time_begin"], format="mixed")
     xy = s.geom.str.extract(r"POINT \(([-\d.]+) ([-\d.]+)\)").astype(float)
     s["slon"], s["slat"] = xy[0], xy[1]
     s["manual_fill"] = s.manual_fill.astype(str).str.lower().eq("true").astype(float)
