@@ -1,4 +1,7 @@
 import { useDashboardStore } from "@/store/dashboardStore";
+import { getBusVariant } from "@/utils/busVariant";
+import busV1Front from "../../assets/bus-v1-front.png";
+import busV2Front from "../../assets/bus-v2-front.png";
 
 export function DrillDownPanel() {
   const selectedVehicleId = useDashboardStore((s) => s.selectedVehicleId);
@@ -12,22 +15,29 @@ export function DrillDownPanel() {
 
   if (!vehicle) return null;
 
+  const variant = getBusVariant(vehicle.id);
+  const busFrontImage = variant === "v1" ? busV1Front : busV2Front;
   const minutes = vehicle.predictedDelaySeconds !== null ? Math.round(vehicle.predictedDelaySeconds / 60) : 0;
   const factMinutes = vehicle.delaySeconds !== null ? Math.round(vehicle.delaySeconds / 60) : 0;
   const target = route?.stops.find(s => s.id === vehicle.targetStopId);
 
   return (
     <div className="pointer-events-auto h-full w-[320px] rounded-2xl bg-white/90 backdrop-blur-xl border border-white/[0.06] dark:border-white/[0.06] border-gray-200 shadow-panel flex flex-col overflow-hidden animate-[fadeIn_0.15s_ease-out]">
-      <div className="flex items-start justify-between px-4 pt-4 pb-3 border-b border-gray-200">
-        <div>
-          <div className="text-sm font-semibold  text-gray-800">
-            Борт №{vehicle.garageNumber} · Маршрут {route?.shortName}
+      <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-gray-200">
+        <img 
+          src={busFrontImage} 
+          alt={`Bus ${vehicle.garageNumber}`} 
+          className="w-20 h-16 object-contain flex-shrink-0" 
+        />
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold text-gray-800 truncate">
+            Борт №{vehicle.garageNumber}
           </div>
-          <div className="text-xs text-gray-600 mt-0.5">{route?.shortName}</div>
+          <div className="text-xs text-gray-600 truncate">Маршрут {route?.shortName}</div>
         </div>
         <button
           onClick={() => selectVehicle(null)}
-          className="text-gray-600 hover:text-gray-800 text-sm leading-none px-1"
+          className="text-gray-600 hover:text-gray-800 text-sm leading-none px-1 flex-shrink-0"
           aria-label="Закрыть"
         >
           ✕

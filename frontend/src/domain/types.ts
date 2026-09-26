@@ -55,6 +55,7 @@ export interface Vehicle {
   targetStopId: string | null;
   targetTime: string | null;
   source: string | null;
+  bearing?: number; // Direction in degrees (0-360, 0 = North)
 }
 
 export interface DashboardFilters {
