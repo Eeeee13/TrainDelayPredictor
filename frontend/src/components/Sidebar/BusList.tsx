@@ -36,7 +36,7 @@ export function BusList() {
           />
         ))}
         {list.length === 0 && (
-          <div className="text-sm text-base-400 dark:text-base-400 text-gray-600 px-3 py-6 text-center">
+          <div className="text-sm text-gray-600 px-3 py-6 text-center">
             Транспорт по выбранным фильтрам не найден
           </div>
         )}

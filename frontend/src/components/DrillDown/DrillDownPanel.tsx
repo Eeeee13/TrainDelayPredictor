@@ -17,17 +17,17 @@ export function DrillDownPanel() {
   const target = route?.stops.find(s => s.id === vehicle.targetStopId);
 
   return (
-    <div className="pointer-events-auto h-full w-[320px] rounded-2xl bg-base-900/80 dark:bg-base-900/80 bg-white/90 backdrop-blur-xl border border-white/[0.06] dark:border-white/[0.06] border-gray-200 shadow-panel flex flex-col overflow-hidden animate-[fadeIn_0.15s_ease-out]">
-      <div className="flex items-start justify-between px-4 pt-4 pb-3 border-b border-base-800 dark:border-base-800 border-gray-200">
+    <div className="pointer-events-auto h-full w-[320px] rounded-2xl bg-white/90 backdrop-blur-xl border border-white/[0.06] dark:border-white/[0.06] border-gray-200 shadow-panel flex flex-col overflow-hidden animate-[fadeIn_0.15s_ease-out]">
+      <div className="flex items-start justify-between px-4 pt-4 pb-3 border-b border-gray-200">
         <div>
-          <div className="text-sm font-semibold text-base-200 dark:text-base-200 text-gray-800">
+          <div className="text-sm font-semibold  text-gray-800">
             Борт №{vehicle.garageNumber} · Маршрут {route?.shortName}
           </div>
-          <div className="text-xs text-base-400 dark:text-base-400 text-gray-600 mt-0.5">{route?.shortName}</div>
+          <div className="text-xs text-gray-600 mt-0.5">{route?.shortName}</div>
         </div>
         <button
           onClick={() => selectVehicle(null)}
-          className="text-base-400 dark:text-base-400 text-gray-600 hover:text-base-200 dark:hover:text-base-200 hover:text-gray-800 text-sm leading-none px-1"
+          className="text-gray-600 hover:text-gray-800 text-sm leading-none px-1"
           aria-label="Закрыть"
         >
           ✕
@@ -35,12 +35,12 @@ export function DrillDownPanel() {
       </div>
 
       <div className="px-4 py-3 grid grid-cols-2 gap-2">
-        <div className="rounded-xl bg-base-850 dark:bg-base-850 bg-gray-100 px-3 py-2">
-          <div className="text-[10px] uppercase text-base-400 dark:text-base-400 text-gray-600">Факт. отклонение</div>
-          <div className="text-lg font-semibold text-base-200 dark:text-base-200 text-gray-800">{factMinutes} мин</div>
+        <div className="rounded-xl bg-gray-100 px-3 py-2">
+          <div className="text-[10px] uppercase text-gray-600">Факт. отклонение</div>
+          <div className="text-lg font-semibold  text-gray-800">{factMinutes} мин</div>
         </div>
-        <div className="rounded-xl bg-base-850 dark:bg-base-850 bg-gray-100 px-3 py-2">
-          <div className="text-[10px] uppercase text-base-400 dark:text-base-400 text-gray-600">Прогноз (10-15 мин)</div>
+        <div className="rounded-xl bg-gray-100 px-3 py-2">
+          <div className="text-[10px] uppercase text-gray-600">Прогноз (10-15 мин)</div>
           <div
             className={`text-lg font-semibold ${
               vehicle.risk === "high"
@@ -55,31 +55,31 @@ export function DrillDownPanel() {
         </div>
       </div>
 
-      <div className="px-4 py-3 border-t border-base-800 dark:border-base-800 border-gray-200">
-        <div className="text-[10px] uppercase text-base-400 dark:text-base-400 text-gray-600 mb-1.5">Проблемный участок</div>
-        <div className="text-sm text-base-200 dark:text-base-200 text-gray-800">
+      <div className="px-4 py-3 border-t border-gray-200">
+        <div className="text-[10px] uppercase text-gray-600 mb-1.5">Проблемный участок</div>
+        <div className="text-sm  text-gray-800">
           {target ? `До остановки №${target.sequence}` : "Целевая остановка пока не определена"}
         </div>
-        <div className="text-xs text-base-400 dark:text-base-400 text-gray-600 mt-1">
+        <div className="text-xs text-gray-600 mt-1">
           {vehicle.targetTime ? `Плановое прибытие: ${new Date(vehicle.targetTime).toLocaleString("ru-RU")}` : "Прогноз появится при входе в горизонт 10–15 минут"}
         </div>
       </div>
 
-      <div className="px-4 py-3 border-t border-base-800 dark:border-base-800 border-gray-200">
-        <div className="text-[10px] uppercase text-base-400 dark:text-base-400 text-gray-600 mb-1.5">Последняя телеметрия</div>
-        <div className="text-sm text-base-200 dark:text-base-200 text-gray-800">
+      <div className="px-4 py-3 border-t border-gray-200">
+        <div className="text-[10px] uppercase text-gray-600 mb-1.5">Последняя телеметрия</div>
+        <div className="text-sm  text-gray-800">
           {new Date(vehicle.lastUpdate).toLocaleString("ru-RU")}
         </div>
-        <div className="text-xs text-base-400 dark:text-base-400 text-gray-600 mt-1">
+        <div className="text-xs text-gray-600 mt-1">
           Скорость {Math.round(vehicle.speedKmh)} км/ч · Источник {vehicle.source ?? "GPS"}
         </div>
       </div>
 
-      <div className="px-4 py-3 border-t border-base-800 dark:border-base-800 border-gray-200">
-        <div className="text-[10px] uppercase text-base-400 dark:text-base-400 text-gray-600 mb-1.5">Ближайшие остановки</div>
+      <div className="px-4 py-3 border-t border-gray-200">
+        <div className="text-[10px] uppercase text-gray-600 mb-1.5">Ближайшие остановки</div>
         <div className="flex flex-col gap-1">
           {route?.stops.slice(0, 5).map((stop) => (
-            <div key={stop.id} className={`flex justify-between text-xs ${stop.id === vehicle.targetStopId ? "text-risk-high font-semibold" : "text-base-400 dark:text-base-400 text-gray-600"}`}>
+            <div key={stop.id} className={`flex justify-between text-xs ${stop.id === vehicle.targetStopId ? "text-risk-high font-semibold" : "text-gray-600"}`}>
               <span>№{stop.sequence}</span>
               <time>{new Date(stop.scheduledTime).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</time>
             </div>

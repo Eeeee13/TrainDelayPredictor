@@ -13,6 +13,7 @@ import logging
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bus.event_bus import TOPIC_FEATURES, TOPIC_TELEMETRY, EventBus
+from app.core.time import utc_naive
 from app.domain.entities import TelemetryRecord
 from app.repositories.schedule_repo import ScheduleRepository
 from app.repositories.telemetry_repo import TelemetryRepository
@@ -50,7 +51,7 @@ class TelemetryWorker:
     async def _handle(self, payload: dict) -> None:
         record = TelemetryRecord(
             vehicle_id=payload["vehicle_id"],
-            event_time=dt.datetime.fromisoformat(payload["event_time"]),
+            event_time=utc_naive(dt.datetime.fromisoformat(payload["event_time"])),
             latitude=payload["latitude"],
             longitude=payload["longitude"],
             speed=payload.get("speed", 0.0),
