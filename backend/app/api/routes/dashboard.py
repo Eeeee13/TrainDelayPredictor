@@ -97,7 +97,8 @@ async def snapshot(container: Container = Depends(get_container)) -> dict:
                      "target_time_begin": risk.target_time_begin.isoformat(),
                      "predicted_at": risk.predicted_at.isoformat(),
                      "predicted_delay_s": risk.predicted_delay_s,
-                     "risk_level": risk.risk_level, "source": risk.source}
+                     "risk_level": risk.risk_level, "source": risk.source,
+                     "delay_probability": risk.delay_probability}
                     if risk is not None else None
                 ),
             })

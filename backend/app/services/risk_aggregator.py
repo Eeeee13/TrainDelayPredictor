@@ -64,4 +64,5 @@ class RiskAggregator:
             reason=reason,
             source=result.source,
             confidence=result.confidence,
+            delay_probability=result.delay_probability,
         )
