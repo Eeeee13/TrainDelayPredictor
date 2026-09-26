@@ -1,10 +1,17 @@
 import { create } from "zustand";
-import type { DashboardFilters, KpiSnapshot, RouteDef, Vehicle } from "@/domain/types";
+import type { DashboardFilters, KpiSnapshot, RouteDef, TrailPoint, Vehicle } from "@/domain/types";
 import { fetchDashboard, subscribeRisks } from "@/services/dashboardApi";
+
+const MAX_TRAIL_POINTS = 500;
+
+const RISK_HYSTERESIS_SAMPLES = 1;
+
+interface PendingRisk { level: Vehicle["risk"]; streak: number }
 
 interface DashboardState {
   routes: RouteDef[];
   vehicles: Record<string, Vehicle>;
+  riskTrails: Record<string, TrailPoint[]>;
   selectedVehicleId: string | null;
   filters: DashboardFilters;
   kpi: KpiSnapshot;
@@ -27,8 +34,43 @@ function computeKpi(vehicles: Vehicle[]): KpiSnapshot {
   };
 }
 
+const pendingRisk: Record<string, PendingRisk> = {};
+
+function resolveEffectiveRisk(vehicleId: string, risk: Vehicle["risk"]): Vehicle["risk"] {
+  if (RISK_HYSTERESIS_SAMPLES <= 1 || risk === "low" || risk === null) {
+    delete pendingRisk[vehicleId];
+    return risk;
+  }
+  const pending = pendingRisk[vehicleId];
+  if (pending && pending.level === risk) {
+    pending.streak += 1;
+  } else {
+    pendingRisk[vehicleId] = { level: risk, streak: 1 };
+  }
+  return pendingRisk[vehicleId].streak >= RISK_HYSTERESIS_SAMPLES ? risk : null;
+}
+
+function accumulateRiskTrails(prev: Record<string, TrailPoint[]>, vehicles: Vehicle[]): Record<string, TrailPoint[]> {
+  const seen = new Set(vehicles.map(v => v.id));
+  const next: Record<string, TrailPoint[]> = {};
+  for (const v of vehicles) {
+    const history = prev[v.id] ?? [];
+    const last = history[history.length - 1];
+    const effectiveRisk = resolveEffectiveRisk(v.id, v.risk);
+    const moved = !last || last.lat !== v.position.lat || last.lng !== v.position.lng;
+    const extended = moved
+      ? [...history, { lat: v.position.lat, lng: v.position.lng, risk: effectiveRisk }]
+      : (last && last.risk !== effectiveRisk
+          ? [...history.slice(0, -1), { ...last, risk: effectiveRisk }]
+          : history);
+    next[v.id] = extended.length > MAX_TRAIL_POINTS ? extended.slice(-MAX_TRAIL_POINTS) : extended;
+  }
+  for (const id of Object.keys(pendingRisk)) if (!seen.has(id)) delete pendingRisk[id];
+  return next;
+}
+
 export const useDashboardStore = create<DashboardState>((set, get) => ({
-  routes: [], vehicles: {}, selectedVehicleId: null,
+  routes: [], vehicles: {}, riskTrails: {}, selectedVehicleId: null,
   filters: {routeIds: null, riskLevels: null, onlyPredicted: false, query: ""},
   kpi: {onTimePct: 0, atRiskPct: 0, avgPredictedDelaySec: 0, activeAlerts: 0},
   status: "loading", error: null,
@@ -36,6 +78,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     try {
       const data = await fetchDashboard();
       set(state => ({routes: data.routes, vehicles: Object.fromEntries(data.vehicles.map(v => [v.id, v])),
+        riskTrails: accumulateRiskTrails(state.riskTrails, data.vehicles),
         selectedVehicleId: state.selectedVehicleId && data.vehicles.some(v => v.id === state.selectedVehicleId)
           ? state.selectedVehicleId : null,
         kpi: computeKpi(data.vehicles), status: "online", error: null}));

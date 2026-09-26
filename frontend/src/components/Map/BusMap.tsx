@@ -5,7 +5,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 maplibregl.setWorkerUrl(workerUrl);
 import { useDashboardStore } from "@/store/dashboardStore";
-import type { RouteDef, RiskLevel, Vehicle } from "@/domain/types";
+import type { RiskLevel, TrailPoint, Vehicle } from "@/domain/types";
 import { getBusVariant, BusVariant } from "@/utils/busVariant";
 import { BusTopIcon } from "./BusTopIcon";
 
@@ -16,52 +16,42 @@ const LABEL_ZOOM_THRESHOLD = 13;
 const ICON_ZOOM_THRESHOLD = 12;
 
 const colors = { low: "#30d158", medium: "#ffd60a", high: "#ff453a", unknown: "#33789d" };
-const trailColors = ["#267ca3", "#8753af", "#dc7136", "#2b9677", "#bf4d76"];
+const DEFAULT_TRAIL_COLOR = colors.unknown;
 const VARIANTS: BusVariant[] = ["v1", "v2"];
 
-function trailColor(id: string): string {
-  let hash = 0;
-  for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  return trailColors[hash % trailColors.length];
+type ProblemRisk = "medium" | "high";
+
+function isProblemRisk(risk: RiskLevel | null): risk is ProblemRisk {
+  return risk === "medium" || risk === "high";
 }
 
 const empty = (): GeoJSON.FeatureCollection => ({ type: "FeatureCollection", features: [] });
 
-function routeFeatures(vehicles: Vehicle[]): GeoJSON.FeatureCollection {
-  return {
-    type: "FeatureCollection",
-    features: vehicles.filter(v => v.trail.length > 1).map(vehicle => {
-      return {
+function riskTrailFeatures(riskTrails: Record<string, TrailPoint[]>): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = [];
+  for (const [vehicleId, points] of Object.entries(riskTrails)) {
+    if (points.length < 2) continue;
+    let segmentStart = 0;
+    const flush = (end: number) => {
+      const segment = points.slice(segmentStart, end + 1);
+      if (segment.length < 2) return;
+      const problem = isProblemRisk(segment[segment.length - 1].risk);
+      const risk = problem ? (segment[segment.length - 1].risk as ProblemRisk) : null;
+      features.push({
         type: "Feature",
-        properties: { vehicleId: vehicle.id, color: trailColor(vehicle.id) },
-        geometry: { type: "LineString", coordinates: vehicle.trail.map(p => [p.lng, p.lat]) }
-      };
-    })
-  };
-}
-
-function problemFeatures(routes: RouteDef[], vehicles: Record<string, Vehicle>, selected: string | null): GeoJSON.FeatureCollection {
-  return {
-    type: "FeatureCollection",
-    features: routes.flatMap(route => {
-      const vehicle = vehicles[route.vehicleId];
-      if (!vehicle || !vehicle.targetStopId || !vehicle.risk || vehicle.risk === "low" || (selected && selected !== vehicle.id)) return [];
-      const target = route.stops.findIndex(s => s.id === vehicle.targetStopId);
-      if (target < 0) return [];
-      const prior = route.stops.slice(0, target + 1);
-      const closest = prior.reduce((best, stop, index) => {
-        const d = (stop.position.lat - vehicle.position.lat) ** 2 + (stop.position.lng - vehicle.position.lng) ** 2;
-        return d < best.distance ? { index, distance: d } : best;
-      }, { index: 0, distance: Infinity }).index;
-      const coords = [vehicle.position, ...route.stops.slice(closest + 1, target + 1).map(s => s.position)].map(p => [p.lng, p.lat]);
-      if (coords.length < 2) coords.push([route.stops[target].position.lng, route.stops[target].position.lat]);
-      return [{
-        type: "Feature" as const,
-        properties: { color: colors[vehicle.risk], vehicleId: vehicle.id },
-        geometry: { type: "LineString" as const, coordinates: coords }
-      }];
-    })
-  };
+        properties: { vehicleId, problem, color: risk ? colors[risk] : DEFAULT_TRAIL_COLOR },
+        geometry: { type: "LineString", coordinates: segment.map(p => [p.lng, p.lat]) }
+      });
+    };
+    for (let i = 1; i < points.length; i++) {
+      if (isProblemRisk(points[i - 1].risk) !== isProblemRisk(points[i].risk)) {
+        flush(i);
+        segmentStart = i; // shared boundary point keeps the line visually continuous
+      }
+    }
+    flush(points.length - 1);
+  }
+  return { type: "FeatureCollection", features };
 }
 
 /**
@@ -85,8 +75,8 @@ const ICON_SIZE_EXPRESSION: maplibregl.ExpressionSpecification = [
 ];
 
 export function BusMap() {
-  const routes = useDashboardStore((s) => s.routes);
   const vehicles = useDashboardStore((s) => s.vehicles);
+  const riskTrails = useDashboardStore((s) => s.riskTrails);
   const selected = useDashboardStore((s) => s.selectedVehicleId);
   const filters = useDashboardStore((s) => s.filters);
   const selectVehicle = useDashboardStore((s) => s.selectVehicle);
@@ -103,6 +93,11 @@ export function BusMap() {
     const q = filters.query.trim().toLowerCase();
     return !q || `${v.id} ${v.garageNumber} ${v.routeId}`.toLowerCase().includes(q);
   }), [vehicles, filters]);
+
+  const visibleRiskTrails = useMemo(() => {
+    const ids = new Set(visible.map(v => v.id));
+    return Object.fromEntries(Object.entries(riskTrails).filter(([id]) => ids.has(id)));
+  }, [riskTrails, visible]);
 
   useEffect(() => {
     if (!container.current) return;
@@ -144,11 +139,22 @@ export function BusMap() {
         });
       });
 
-      map.addSource("routes", { type: "geojson", data: empty() });
-      map.addLayer({ id: "routes", type: "line", source: "routes", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "color"], "line-width": 4, "line-opacity": 0.85 } });
-      map.addSource("problem", { type: "geojson", data: empty() });
-      map.addLayer({ id: "problem-halo", type: "line", source: "problem", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 11, "line-opacity": 0.92 } });
-      map.addLayer({ id: "problem", type: "line", source: "problem", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "color"], "line-width": 7, "line-opacity": 0.95, "line-dasharray": [1.2, 0.8] } });
+      map.addSource("trails", { type: "geojson", data: empty() });
+      map.addLayer({
+        id: "trails-halo", type: "line", source: "trails",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#ffffff", "line-width": 9, "line-opacity": 0.9 },
+        filter: ["==", ["get", "problem"], true]
+      });
+      map.addLayer({
+        id: "trails", type: "line", source: "trails",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": ["get", "color"],
+          "line-width": ["case", ["get", "problem"], 5, 3],
+          "line-opacity": ["case", ["get", "problem"], 0.95, 0.7]
+        }
+      });
       map.addSource("vehicles", { type: "geojson", data: empty() });
       // Circle markers at low zoom — don't depend on the bus images, safe to add now
       map.addLayer({ id: "vehicle-halo", type: "circle", source: "vehicles", paint: { "circle-radius": 15, "circle-color": "#ffffff", "circle-opacity": 0.96 }, filter: ["<", ["zoom"], ICON_ZOOM_THRESHOLD] });
@@ -190,9 +196,7 @@ export function BusMap() {
     if (!map) return;
     const update = () => {
       if (!map.getSource("vehicles")) return;
-      const ids = new Set(visible.map(v => v.id));
-      (map.getSource("routes") as maplibregl.GeoJSONSource).setData(routeFeatures(visible));
-      (map.getSource("problem") as maplibregl.GeoJSONSource).setData(problemFeatures(routes.filter(r => ids.has(r.vehicleId)), vehicles, selected));
+      (map.getSource("trails") as maplibregl.GeoJSONSource).setData(riskTrailFeatures(visibleRiskTrails));
       (map.getSource("vehicles") as maplibregl.GeoJSONSource).setData({
         type: "FeatureCollection",
         features: visible.map(v => {
@@ -211,7 +215,7 @@ export function BusMap() {
             properties: {
               id: v.id,
               label: zoom >= LABEL_ZOOM_THRESHOLD ? v.garageNumber : undefined,
-              color: v.risk ? colors[v.risk] : trailColor(v.id),
+              color: v.risk ? colors[v.risk] : DEFAULT_TRAIL_COLOR,
               riskKey: v.risk || "low",
               variant: getBusVariant(v.id),
               bearing: bearing,
@@ -232,7 +236,7 @@ export function BusMap() {
       if (!visible.length) fittedVehicles.current = "";
     };
     if (map.isStyleLoaded()) update(); else map.once("load", update);
-  }, [routes, vehicles, visible, selected, zoom]);
+  }, [visible, visibleRiskTrails, selected, zoom]);
 
   useEffect(() => {
     const v = selected ? vehicles[selected] : null;

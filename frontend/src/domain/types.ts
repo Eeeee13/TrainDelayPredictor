@@ -56,6 +56,10 @@ export interface Vehicle {
   bearing?: number; // Direction in degrees (0-360, 0 = North)
 }
 
+export interface TrailPoint extends LatLng {
+  risk: RiskLevel | null;
+}
+
 export interface DashboardFilters {
   routeIds: string[] | null;
   riskLevels: RiskLevel[] | null;
