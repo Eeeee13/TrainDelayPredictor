@@ -25,7 +25,7 @@ export function BusCard({ vehicle, route, selected, onSelect }: Props) {
           : "border-transparent hover:bg-gray-100"
       }`}
     >
-      <BusSideIcon risk={vehicle.risk ?? "low"} number={route?.shortName ?? "–"} />
+      <BusSideIcon risk={vehicle.risk ?? "low"} number={route?.shortName ?? "–"} vehicleId={vehicle.id} />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between">
           <span className="text-sm font-medium text-gray-800 truncate">
