@@ -81,9 +81,21 @@ class HttpInferenceClient(InferenceClient):
             ]
         }
         async with httpx.AsyncClient(timeout=self._timeout_s) as client:
-            resp = await client.post(self._url, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
+            started = time.perf_counter()
+            outcome = "ok"
+            try:
+                resp = await client.post(self._url, json=payload)
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception as exc:
+                outcome = type(exc).__name__
+                raise
+            finally:
+                logger.info(
+                    "inference_http items=%d vehicles=%d elapsed_ms=%.3f outcome=%s",
+                    len(items), len({item.tr_id for item in items}),
+                    (time.perf_counter() - started) * 1000, outcome,
+                )
         by_id = {row["request_id"]: row for row in data["items"]}
         results = []
         for item in items:
@@ -137,7 +149,7 @@ class ResilientInferenceClient(InferenceClient):
         self,
         primary: InferenceClient,
         fallback: InferenceClient,
-        max_retries: int = 1,
+        max_retries: int = 0,
         fail_threshold: int = 3,
         cooldown_s: float = 15.0,
     ) -> None:
@@ -162,6 +174,10 @@ class ResilientInferenceClient(InferenceClient):
             except Exception as exc:  # noqa: BLE001 - any failure degrades, doesn't crash the pipeline
                 last_exc = exc
                 logger.warning("inference call failed (attempt %d/%d): %s: %s", attempt + 1, self._max_retries + 1, type(exc).__name__, exc)
+                # A timed-out read may still be computing on the server.
+                # Retrying immediately would duplicate that work.
+                if isinstance(exc, httpx.ReadTimeout):
+                    break
         self._breaker.record_failure()
         logger.warning("inference degraded to heuristic fallback: %s: %s", type(last_exc).__name__, last_exc)
         return await self._fallback.predict_batch(items)

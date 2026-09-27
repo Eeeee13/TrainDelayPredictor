@@ -17,10 +17,13 @@ from pathlib import Path
 import lightgbm as lgb
 import pandas as pd
 
+
 try:
+    from .timing import measure
     from .features import build, clean_traffic, load_schedule, predict
     from .probability import DelayProbability
 except ImportError:  # running as a script from this directory
+    from timing import measure
     from features import build, clean_traffic, load_schedule, predict
     from probability import DelayProbability
 
@@ -122,7 +125,12 @@ class DelayPredictor:
         return predict(self.model, X)
 
     def predict_points_with_probability(self, points: pd.DataFrame):
-        X = build(points, self.sched, self._traffic())
-        delays = predict(self.model, X)
-        probabilities = self.probability.predict(X) if self.probability else [None] * len(X)
+        with measure("traffic_clean_ms"):
+            traffic = self._traffic()
+        with measure("features_ms"):
+            X = build(points, self.sched, traffic)
+        with measure("regression_ms"):
+            delays = predict(self.model, X)
+        with measure("probability_ms"):
+            probabilities = self.probability.predict(X) if self.probability else [None] * len(X)
         return delays, probabilities

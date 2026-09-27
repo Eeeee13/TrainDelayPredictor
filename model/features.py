@@ -7,6 +7,11 @@ Schedule facts (time_fact_begin) are never used as features.
 import numpy as np
 import pandas as pd
 
+try:
+    from .timing import measure
+except ImportError:  # direct import from the model directory
+    from timing import measure
+
 M_PER_DEG_LAT = 111_200.0
 M_PER_DEG_LON = 62_800.0  # ~cos(55.75°) * 111.2 km
 PASS_RADIUS_M = 50.0
@@ -82,8 +87,16 @@ def load_traffic(path, clean=True):
 def load_schedule(path):
     s = path.copy() if isinstance(path, pd.DataFrame) else pd.read_csv(path, parse_dates=["time_begin"])
     s["time_begin"] = pd.to_datetime(s["time_begin"], format="mixed")
-    xy = s.geom.str.extract(r"POINT \(([-\d.]+) ([-\d.]+)\)").astype(float)
-    s["slon"], s["slat"] = xy[0], xy[1]
+    if "geom" in s:
+        xy = s.geom.str.extract(r"POINT \(([-\d.]+) ([-\d.]+)\)").astype(float)
+        s["slon"], s["slat"] = xy[0], xy[1]
+    else:
+        # The API already reads numeric coordinates from PostgreSQL. Avoid
+        # formatting POINT strings only to parse them again here. An incomplete
+        # point has two missing coordinates, just like the legacy WKT parser.
+        xy = s[["longitude", "latitude"]].astype(float)
+        xy = xy.where(xy.notna().all(axis=1), np.nan)
+        s["slon"], s["slat"] = xy.longitude, xy.latitude
     s["manual_fill"] = s.manual_fill.astype(str).str.lower().eq("true").astype(float)
     if "time_fact_begin" in s:
         s["time_fact_begin"] = pd.to_datetime(s.time_fact_begin, format="mixed")
@@ -111,18 +124,23 @@ def compute_passages(s: pd.DataFrame, g: pd.DataFrame) -> pd.DataFrame:
     et = gv.event_time.values
     lon, lat = gv.lon.values, gv.lat.values
     tb = s.time_begin.values
+    # Resolve columns and time bounds once, preserving the sequential prev
+    # constraint and the exact distance/arrival/confirmation calculations.
+    stop_lon, stop_lat = s.slon.values, s.slat.values
+    lower = np.searchsorted(et, tb - np.timedelta64(12, "m"))
+    upper = np.searchsorted(et, tb + np.timedelta64(12, "m"))
     rows, prev = [], 0
     for i in np.flatnonzero(~s.trip_first.values):
-        lo = max(prev, np.searchsorted(et, tb[i] - np.timedelta64(12, "m")))
-        hi = np.searchsorted(et, tb[i] + np.timedelta64(12, "m"))
+        lo = max(prev, lower[i])
+        hi = upper[i]
         if hi <= lo:
             continue
-        d = dist_m(lon[lo:hi], lat[lo:hi], s.slon.iat[i], s.slat.iat[i])
+        d = dist_m(lon[lo:hi], lat[lo:hi], stop_lon[i], stop_lat[i])
         inside = np.flatnonzero(d < PASS_RADIUS_M)
         if not len(inside):
             continue
         j = lo + inside[0]
-        tail = dist_m(lon[j:j + 300], lat[j:j + 300], s.slon.iat[i], s.slat.iat[i])
+        tail = dist_m(lon[j:j + 300], lat[j:j + 300], stop_lon[i], stop_lat[i])
         out = np.flatnonzero(tail > PASS_RADIUS_M)
         if not len(out):
             continue
@@ -286,10 +304,13 @@ def build(points, sched, traffic):
     points = points.copy()
     points["T"] = pd.to_datetime(points["T"], format="mixed")
     points["target_time_begin"] = pd.to_datetime(points["target_time_begin"], format="mixed")
-    passages = {tr: compute_passages(sched[tr], traffic[tr])
-                for tr in points.tr_id.unique() if tr in sched and tr in traffic}
-    rows = [point_features(p, sched, traffic, passages.get(p["tr_id"])) for p in points.to_dict("records")]
-    return pd.DataFrame(rows).reindex(columns=FEATURES).astype(float)
+    with measure("passages_detail_ms"):
+        passages = {tr: compute_passages(sched[tr], traffic[tr])
+                    for tr in points.tr_id.unique() if tr in sched and tr in traffic}
+    with measure("point_features_detail_ms"):
+        rows = [point_features(p, sched, traffic, passages.get(p["tr_id"])) for p in points.to_dict("records")]
+    with measure("feature_frame_detail_ms"):
+        return pd.DataFrame(rows).reindex(columns=FEATURES).astype(float)
 
 
 
