@@ -2,13 +2,21 @@ import { useState } from "react";
 import { useDashboardStore } from "@/store/dashboardStore";
 import { BusList } from "./BusList";
 import { FilterBar } from "@/components/Filters/FilterBar";
+import { NotificationToggle } from "@/components/Map/Notifications";
 
 type Tab = "buses" | "alerts";
+
+const severityRank: Record<string, number> = { high: 2, medium: 1 };
 
 export function SidePanel() {
   const [tab, setTab] = useState<Tab>("buses");
   const vehicles = useDashboardStore((s) => s.vehicles);
-  const alerts = Object.values(vehicles).filter(v => v.risk === "high" || v.risk === "medium");
+  const routes = useDashboardStore((s) => s.routes);
+  const selectedVehicleId = useDashboardStore((s) => s.selectedVehicleId);
+  const selectVehicle = useDashboardStore((s) => s.selectVehicle);
+  const alerts = Object.values(vehicles)
+    .filter(v => v.risk === "high" || v.risk === "medium")
+    .sort((a, b) => (severityRank[b.risk!] - severityRank[a.risk!]) || (b.predictedDelaySeconds ?? 0) - (a.predictedDelaySeconds ?? 0));
 
   return (
     <div className="pointer-events-auto flex flex-col h-full rounded-2xl bg-white/90 backdrop-blur-xl border border-gray-200 shadow-panel overflow-hidden">
@@ -44,18 +52,41 @@ export function SidePanel() {
 
       <div className="flex-1 min-h-0 mt-1">
         {tab === "buses" ? <BusList /> : (
-          <div className="flex flex-col h-full min-h-0 overflow-y-auto px-2 py-2 space-y-1">
-            {alerts.length ? alerts.map(v => (
-              <div key={v.id} className="flex gap-2.5 items-start bg-gray-100 p-2.5 rounded-xl">
-                <span className={`h-2 w-2 rounded-full mt-1.5 flex-none ${v.risk === "high" ? "bg-risk-high" : "bg-risk-mid"}`} />
-                <div>
-                  <div className="text-sm font-semibold text-gray-800">Борт {v.garageNumber}</div>
-                  <p className="mt-1 text-xs text-gray-600">Прогноз опоздания +{Math.round((v.predictedDelaySeconds ?? 0) / 60)} мин</p>
-                </div>
-              </div>
-            )) : (
+          <div className="flex flex-col h-full min-h-0">
+            <div className="px-2.5 py-2 border-b border-gray-100 flex items-center justify-between">
+              <span className="text-xs font-medium text-gray-600">
+                {alerts.length} {alerts.length === 1 ? "алерт" : alerts.length > 1 && alerts.length < 5 ? "алерта" : "алертов"}
+              </span>
+              <NotificationToggle />
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2 space-y-1">
+              {alerts.length ? alerts.map(v => {
+              const route = routes.find(r => r.id === v.routeId);
+              const target = route?.stops.find(s => s.id === v.targetStopId);
+              return (
+                <button
+                  key={v.id}
+                  onClick={() => selectVehicle(v.id)}
+                  className={`w-full flex gap-2.5 items-start text-left p-2.5 rounded-xl transition-colors ${
+                    v.id === selectedVehicleId ? "bg-gray-200" : "bg-gray-100 hover:bg-gray-200"
+                  }`}
+                >
+                  <span className={`h-2 w-2 rounded-full mt-1.5 flex-none ${v.risk === "high" ? "bg-risk-high" : "bg-risk-mid"}`} />
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-gray-800 truncate">
+                      Борт {v.garageNumber}{route?.shortName ? ` · Маршрут ${route.shortName}` : ""}
+                    </div>
+                    <p className="mt-1 text-xs text-gray-600">Прогноз опоздания +{Math.round((v.predictedDelaySeconds ?? 0) / 60)} мин</p>
+                    {target && (
+                      <p className="mt-0.5 text-[11px] text-gray-500">До остановки №{target.sequence}</p>
+                    )}
+                  </div>
+                </button>
+              );
+            }) : (
               <div className="text-sm text-gray-600 px-3 py-6 text-center">Активных алертов нет</div>
             )}
+            </div>
           </div>
         )}
       </div>

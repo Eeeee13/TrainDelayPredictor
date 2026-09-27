@@ -21,6 +21,8 @@ interface DashboardState {
   kpi: KpiSnapshot;
   status: "loading" | "online" | "error";
   error: string | null;
+  notificationsEnabled: boolean;
+  toggleNotifications: () => void;
   init: () => () => void;
   refresh: () => Promise<void>;
   selectVehicle: (id: string | null) => void;
@@ -100,7 +102,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   routes: [], vehicles: {}, riskTrails: {}, selectedVehicleId: null, selectionToken: 0,
   filters: {routeIds: null, riskLevels: null, onlyPredicted: false, query: ""},
   kpi: {onTimePct: 0, atRiskPct: 0, avgPredictedDelaySec: 0, activeAlerts: 0},
-  status: "loading", error: null,
+  status: "loading", error: null, notificationsEnabled: true,
   refresh: async () => {
     try {
       const data = await fetchDashboard();
@@ -120,5 +122,6 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     return () => {clearInterval(timer); unsubscribe();};
   },
   selectVehicle: (id) => set(state => ({selectedVehicleId: id, selectionToken: state.selectionToken + 1})),
-  setFilters: (f) => set(state => ({filters: {...state.filters, ...f}}))
+  setFilters: (f) => set(state => ({filters: {...state.filters, ...f}})),
+  toggleNotifications: () => set(state => ({notificationsEnabled: !state.notificationsEnabled}))
 }));
