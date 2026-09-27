@@ -117,7 +117,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
   init: () => {
     void get().refresh();
-    const timer = setInterval(() => { void get().refresh(); }, 10000);
+    const timer = setInterval(() => { void get().refresh(); }, 2000);
     const unsubscribe = subscribeRisks(() => { void get().refresh(); });
     return () => {clearInterval(timer); unsubscribe();};
   },
