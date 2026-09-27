@@ -148,8 +148,9 @@ export function BusMap() {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const fittedVehicles = useRef("");
   const followRef = useRef(false);
+  const userInteractedRef = useRef(false);
+  const prevSelectedRef = useRef<string | null>(null);
   const [zoom, setZoom] = useState(13);
-  const selectionToken = useDashboardStore((s) => s.selectionToken);
 
   const visible = useMemo(() => Object.values(vehicles).filter(v => {
     if (filters.routeIds && !filters.routeIds.includes(v.routeId)) return false;
@@ -189,8 +190,10 @@ export function BusMap() {
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
     map.on("zoom", () => setZoom(map.getZoom()));
     // A user-initiated drag always means "I want to look elsewhere" — stop
-    // auto-following.
-    map.on("dragstart", () => { followRef.current = false; });
+    // auto-following and auto-fitting.
+    map.on("dragstart", (e) => { if (e.originalEvent) { followRef.current = false; userInteractedRef.current = true; } });
+    map.on("zoomstart", (e) => { if (e.originalEvent) userInteractedRef.current = true; });
+    map.on("wheel", (e) => { if (e.originalEvent) userInteractedRef.current = true; });
     map.on("load", () => {
       map.addSource("heat", { type: "geojson", data: empty() });
       map.addLayer({
@@ -335,17 +338,17 @@ export function BusMap() {
 
 
       const activeVehicles = visible.map(v => v.id).sort().join("|");
-      if (activeVehicles !== fittedVehicles.current && visible.length) {
+      // Only auto-fit on the very first load (when fittedVehicles is empty)
+      if (fittedVehicles.current === "" && visible.length) {
         const bounds = new maplibregl.LngLatBounds();
         visible.forEach(v => bounds.extend([v.position.lng, v.position.lat]));
         if (visible.length === 1) map.easeTo({ center: [visible[0].position.lng, visible[0].position.lat], zoom: 14, duration: 500 });
         else map.fitBounds(bounds, { padding: 110, maxZoom: 14, duration: 500 });
         fittedVehicles.current = activeVehicles;
       }
-      if (!visible.length) fittedVehicles.current = "";
 
-      // Live tracking
-      if (followRef.current && selected) {
+      // Live tracking - only if user hasn't manually interacted
+      if (followRef.current && selected && !userInteractedRef.current) {
         const tracked = visible.find(v => v.id === selected);
         if (tracked) map.easeTo({ center: [tracked.position.lng, tracked.position.lat], duration: 500 });
       }
@@ -379,7 +382,7 @@ export function BusMap() {
             properties: {
               id: v.id,
               label: zoom >= LABEL_ZOOM_THRESHOLD ? v.garageNumber : undefined,
-              color: v.risk ? colors[v.risk] : DEFAULT_TRAIL_COLOR,
+              color: v.risk ? colors[v.risk] : colors.unknown,
               riskKey: v.risk || "unknown",
               variant: getBusVariant(v.id),
               bearing,
@@ -397,14 +400,19 @@ export function BusMap() {
   }, []);
 
   useEffect(() => {
-    const { selectedVehicleId, vehicles: currentVehicles } = useDashboardStore.getState();
-    if (!selectedVehicleId) { followRef.current = false; return; }
-    followRef.current = true;
-    const v = currentVehicles[selectedVehicleId];
-    if (v) mapRef.current?.easeTo({ center: [v.position.lng, v.position.lat], zoom: Math.max(mapRef.current?.getZoom() ?? 14, 14), duration: 500 });
-  }, [selectionToken]);
+    if (!selected) { followRef.current = false; prevSelectedRef.current = null; return; }
+    // Only reset user interaction when explicitly selecting a NEW vehicle
+    if (prevSelectedRef.current !== selected) {
+      followRef.current = true;
+      userInteractedRef.current = false; // Reset on explicit selection - user wants to see this vehicle
+      prevSelectedRef.current = selected;
+      const v = useDashboardStore.getState().vehicles[selected];
+      if (v) {
+        mapRef.current?.easeTo({ center: [v.position.lng, v.position.lat], zoom: Math.max(mapRef.current?.getZoom() ?? 14, 14), duration: 500 });
+      }
+    }
+  }, [selected]);
 
-  useEffect(() => { if (!selected) followRef.current = false; }, [selected]);
 
   return <div ref={container} className="absolute inset-0" aria-label="Карта транспорта" />;
 }
