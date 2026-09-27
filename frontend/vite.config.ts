@@ -11,6 +11,7 @@ export default defineConfig({
     host: "0.0.0.0",
     proxy: {
       "/dashboard": "http://localhost:8000",
+      "/simulation": "http://localhost:8000",
       "/vehicles": { target: "http://localhost:8000", timeout: 120_000 },
       "/ws": { target: "ws://localhost:8000", ws: true }
     }

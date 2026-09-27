@@ -47,10 +47,15 @@ services:
       - ./backend/.env.example
     volumes:
       - ${DATASET_PATH:-./dataset}:/dataset:ro
+      - ./emulator_sample_config.json:/emulator_sample_config.json:ro
     environment:
       APP_DATABASE_URL: postgresql+asyncpg://predictor:predictor@postgres:5432/predictor
       APP_REDIS_URL: redis://redis:6379/0
       APP_INFERENCE_URL: http://inference:8000/predict
+      APP_EMULATOR_URL: http://emulator:18080
+      APP_EMULATOR_CONFIG_PATH: /emulator_sample_config.json
+      APP_REPLAY_SCHEDULE_PATH: /dataset/train/schedule.csv
+      APP_REPLAY_TRAFFIC_PATH: /dataset/train/traffic.csv
       YANDEX_CLOUD_API_KEY: ${YANDEX_CLOUD_API_KEY:-}
       YANDEX_CLOUD_FOLDER: ${YANDEX_CLOUD_FOLDER:-b1gv2rfr13cpst5o42jr}
       YANDEX_CLOUD_MODEL: ${YANDEX_CLOUD_MODEL:-deepseek-v4-flash/latest}
@@ -80,6 +85,17 @@ services:
       - ${DATASET_PATH:-./dataset}:/dataset:ro
       - models:/models
       - pipeline-work:/pipeline-work
+
+  emulator:
+    image: ndtp-telemetry-emulator:1.0
+    platform: linux/amd64
+    container_name: ndtp-emu
+    ports:
+      - "18080:18080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - backend
 
 volumes:
   pgdata:

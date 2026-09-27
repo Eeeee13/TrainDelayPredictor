@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import dashboard, health, ingestion, ndtp_mapping, predictions, vehicles, websocket
+from app.api.routes import dashboard, health, ingestion, ndtp_mapping, predictions, simulation, vehicles, websocket
 from app.core.config import settings
 from app.core.container import build_container
 from app.core.logging import configure_logging, get_logger
@@ -62,3 +62,4 @@ app.include_router(vehicles.router)
 app.include_router(predictions.router)
 app.include_router(websocket.router)
 app.include_router(ndtp_mapping.router)
+app.include_router(simulation.router)

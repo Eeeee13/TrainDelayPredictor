@@ -55,6 +55,14 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     app_name: str = "predictor-backend"
 
+    # --- Dashboard simulation (CSV replay + NDTP emulator) ------------
+    replay_schedule_path: str = ""
+    replay_traffic_path: str = ""
+    replay_start_at: str = "2026-01-06T06:00:00"
+    replay_speed: float = 30.0
+    emulator_url: str = "http://127.0.0.1:18080"
+    emulator_config_path: str = ""
+
 
 def _env_files() -> tuple[str, ...]:
     """Backend cwd `.env` and the repo-root `.env`. Missing files are skipped."""
