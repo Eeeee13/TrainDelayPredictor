@@ -55,7 +55,7 @@ export function DrillDownPanel() {
         <img
           src={busFrontImage}
           alt=""
-          className="pointer-events-none absolute left-1/2 top-[42%] w-[188px] max-w-none -translate-x-1/2 -translate-y-1/2"
+          className="pointer-events-none absolute left-1/2 top-[42%] w-[160px] max-w-none -translate-x-1/2 -translate-y-1/2"
         />
         <button
           onClick={() => selectVehicle(null)}
