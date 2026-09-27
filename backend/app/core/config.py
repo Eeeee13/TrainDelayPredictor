@@ -29,8 +29,8 @@ class Settings(BaseSettings):
 
     # --- ML inference ---------------------------------------------------
     inference_url: str = "http://inference:8000/predict"
-    inference_timeout_s: float = 2.0
-    inference_max_retries: int = 1
+    inference_timeout_s: float = 5.0
+    inference_max_retries: int = 0
     inference_circuit_cooldown_s: float = 15.0
     inference_circuit_fail_threshold: int = 3
 

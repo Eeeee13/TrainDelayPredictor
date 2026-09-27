@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import time
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -84,22 +85,31 @@ class PredictionScheduler:
         async with self._session_factory() as session:
             schedule_repo = ScheduleRepository(session)
             upcoming = await schedule_repo.upcoming_stops(now, settings.schedule_lookahead_s)
-            trip_stops: dict[int, list[ScheduleStop]] = {}
-            for stop in upcoming:
-                trip_stops.setdefault(stop.tr_id, []).append(stop)
-            for stops in trip_stops.values():
-                stops.sort(key=lambda s: s.seq)
+        trip_stops: dict[int, list[ScheduleStop]] = {}
+        for stop in upcoming:
+            trip_stops.setdefault(stop.tr_id, []).append(stop)
+        for stops in trip_stops.values():
+            stops.sort(key=lambda s: s.seq)
 
-            candidates = self._collect_candidates(now, trip_stops, due_safety_pass)
-            if not candidates:
-                if due_safety_pass:
-                    self._last_safety_pass = now
-                return 0
+        candidates = self._collect_candidates(now, trip_stops, due_safety_pass)
+        if not candidates:
+            if due_safety_pass:
+                self._last_safety_pass = now
+            return 0
 
-            items = [self._features.build(c.state, c.target, now) for c in candidates]
-            results = await self._inference.predict_batch(items)
-            results_by_id = {r.request_id: r for r in results}
+        items = [self._features.build(c.state, c.target, now) for c in candidates]
+        inference_started = time.perf_counter()
+        results = await self._inference.predict_batch(items)
+        logger.info(
+            "inference_batch items=%d vehicles=%d elapsed_ms=%.3f model=%d fallback=%d",
+            len(items), len({item.tr_id for item in items}),
+            (time.perf_counter() - inference_started) * 1000,
+            sum(result.source.value == "model" for result in results),
+            sum(result.source.value == "fallback" for result in results),
+        )
+        results_by_id = {r.request_id: r for r in results}
 
+        async with self._session_factory() as session:
             pred_repo = PredictionRepository(session)
             made = 0
             for candidate, item in zip(candidates, items):

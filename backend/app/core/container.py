@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy import select
 
-from app.bus.event_bus import EventBus, build_event_bus
+from app.bus.event_bus import EventBus, RedisStreamsEventBus, build_event_bus
 from app.core.config import settings
 from app.db.session import get_session_factory
 from app.db.models import TelemetryRecordORM, PredictionLogORM
@@ -39,11 +39,17 @@ class Container:
     ws_hub: WebSocketHub
     telemetry_worker: TelemetryWorker
     scheduler: PredictionScheduler
+    redis: object | None = None
 
 
 async def build_container() -> Container:
     session_factory = get_session_factory()
     event_bus = await build_event_bus(settings.redis_url, settings.use_redis_streams)
+
+    # Extract redis client from event_bus if using Redis
+    redis = None
+    if isinstance(event_bus, RedisStreamsEventBus):
+        redis = event_bus._redis
 
     state_cache = StateCache()
     matching_engine = MatchingEngine()
@@ -94,4 +100,5 @@ async def build_container() -> Container:
         ws_hub=ws_hub,
         telemetry_worker=telemetry_worker,
         scheduler=scheduler,
+        redis=redis,
     )

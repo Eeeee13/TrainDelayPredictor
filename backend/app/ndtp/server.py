@@ -13,6 +13,7 @@ from app.bus.event_bus import TOPIC_TELEMETRY, EventBus
 logger = logging.getLogger(__name__)
 NAV = struct.Struct("<IIIBBHHHHHBB")
 CELL_SIZES = {0: 26, 2: 26, 8: 6, 10: 37, 15: 50, 16: 8}
+REDIS_KEY = "ndtp_unit_map"
 
 
 def crc16(data: bytes) -> int:
@@ -52,8 +53,16 @@ def decode_frame(npl: bytes, body: bytes, unit_map: dict[str, int]) -> dict | No
     }
 
 
-async def serve(event_bus: EventBus, host: str = "0.0.0.0", port: int = 9201) -> asyncio.AbstractServer:
+async def serve(event_bus: EventBus, redis, host: str = "0.0.0.0", port: int = 9201) -> asyncio.AbstractServer:
+    """Load unit_map from Redis with ENV fallback."""
     unit_map = {str(k): int(v) for k, v in json.loads(os.getenv("APP_NDTP_UNIT_MAP", "{}")).items()}
+    try:
+        mapping_json = await redis.get(REDIS_KEY)
+        if mapping_json:
+            unit_map.update({str(k): int(v) for k, v in json.loads(mapping_json).items()})
+            logger.info("Loaded %d NDTP mappings from Redis", len(unit_map))
+    except Exception as e:
+        logger.warning("Failed to load NDTP mapping from Redis: %s", e)
 
     async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:

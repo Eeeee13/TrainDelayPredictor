@@ -41,6 +41,10 @@ async def init_db() -> None:
                 if not statement.strip():
                     continue
                 await conn.execute(text(statement))
+            revision_migration = migration.with_name("003_schedule_revision.sql")
+            for statement in revision_migration.read_text().split("-- next-statement"):
+                if statement.strip():
+                    await conn.execute(text(statement))
             await conn.execute(text("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'inference_ro') THEN CREATE ROLE inference_ro LOGIN PASSWORD 'inference_ro'; END IF; END $$"))
             await conn.execute(text("GRANT CONNECT ON DATABASE predictor TO inference_ro"))
             await conn.execute(text("GRANT USAGE ON SCHEMA public TO inference_ro"))
