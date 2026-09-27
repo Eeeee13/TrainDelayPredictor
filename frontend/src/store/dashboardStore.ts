@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import type { DashboardFilters, KpiSnapshot, LatLng, RouteDef, TrailPoint, Vehicle } from "@/domain/types";
 import { fetchDashboard, subscribeRisks } from "@/services/dashboardApi";
+import { loadRouteShapes } from "@/services/routeShapes";
+import { buildShapeByVehicleId } from "@/utils/routeShapeLookup";
+import { snapPositionForDisplay } from "@/utils/snapToRoute";
 
 const MAX_TRAIL_POINTS = 500;
 const MAX_TRAIL_AGE_MS = 45 * 60 * 1000;
@@ -15,6 +18,7 @@ interface DashboardState {
   routes: RouteDef[];
   vehicles: Record<string, Vehicle>;
   riskTrails: Record<string, TrailPoint[]>;
+  routeShapes: Record<string, LatLng[]>;
   selectedVehicleId: string | null;
   selectionToken: number;
   filters: DashboardFilters;
@@ -65,15 +69,30 @@ function resolveEffectiveRisk(vehicleId: string, risk: Vehicle["risk"]): Vehicle
   return pendingRisk[vehicleId].streak >= RISK_HYSTERESIS_SAMPLES ? risk : null;
 }
 
-function accumulateRiskTrails(prev: Record<string, TrailPoint[]>, vehicles: Vehicle[]): Record<string, TrailPoint[]> {
+/**
+ * Builds the accumulated trail per vehicle, snapping each new point onto
+ * that vehicle's route shape (when one is known and close enough) so the
+ * drawn trail follows the road instead of raw GPS jitter.
+ *
+ * The plausible-speed / gap check still uses the *raw* fix, deliberately —
+ * snapping first could shrink a genuinely bad jump onto the route and hide
+ * a real telemetry problem.
+ */
+function accumulateRiskTrails(
+  prev: Record<string, TrailPoint[]>,
+  vehicles: Vehicle[],
+  shapeByVehicleId: Record<string, LatLng[]>
+): Record<string, TrailPoint[]> {
   const seen = new Set(vehicles.map(v => v.id));
   const next: Record<string, TrailPoint[]> = {};
+
   for (const v of vehicles) {
     const history = prev[v.id] ?? [];
     const last = history[history.length - 1];
     const effectiveRisk = resolveEffectiveRisk(v.id, v.risk);
     const now = Date.parse(v.lastUpdate) || Date.now();
-    const moved = !last || last.lat !== v.position.lat || last.lng !== v.position.lng;
+    const displayPos = snapPositionForDisplay(v.position, shapeByVehicleId[v.id]);
+    const moved = !last || last.lat !== displayPos.lat || last.lng !== displayPos.lng;
 
     let extended = history;
     if (moved) {
@@ -83,7 +102,7 @@ function accumulateRiskTrails(prev: Record<string, TrailPoint[]>, vehicles: Vehi
         const speedKmh = haversineKm(last, v.position) / elapsedH;
         gap = speedKmh > MAX_PLAUSIBLE_SPEED_KMH;
       }
-      extended = [...history, { lat: v.position.lat, lng: v.position.lng, risk: effectiveRisk, t: now, gap }];
+      extended = [...history, { lat: displayPos.lat, lng: displayPos.lng, risk: effectiveRisk, t: now, gap }];
     } else if (last && last.risk !== effectiveRisk) {
       extended = [...history.slice(0, -1), { ...last, risk: effectiveRisk }];
     }
@@ -99,15 +118,18 @@ function accumulateRiskTrails(prev: Record<string, TrailPoint[]>, vehicles: Vehi
 }
 
 export const useDashboardStore = create<DashboardState>((set, get) => ({
-  routes: [], vehicles: {}, riskTrails: {}, selectedVehicleId: null, selectionToken: 0,
+  routes: [], vehicles: {}, riskTrails: {}, routeShapes: {}, selectedVehicleId: null, selectionToken: 0,
   filters: {routeIds: null, riskLevels: null, onlyPredicted: false, query: ""},
   kpi: {onTimePct: 0, atRiskPct: 0, avgPredictedDelaySec: 0, activeAlerts: 0},
   status: "loading", error: null, notificationsEnabled: true,
   refresh: async () => {
     try {
       const data = await fetchDashboard();
-      set(state => ({routes: data.routes, vehicles: Object.fromEntries(data.vehicles.map(v => [v.id, v])),
-        riskTrails: accumulateRiskTrails(state.riskTrails, data.vehicles),
+      const vehiclesById = Object.fromEntries(data.vehicles.map(v => [v.id, v]));
+      const shapeByVehicleId = buildShapeByVehicleId(data.routes, vehiclesById, get().routeShapes);
+
+      set(state => ({routes: data.routes, vehicles: vehiclesById,
+        riskTrails: accumulateRiskTrails(state.riskTrails, data.vehicles, shapeByVehicleId),
         selectedVehicleId: state.selectedVehicleId && data.vehicles.some(v => v.id === state.selectedVehicleId)
           ? state.selectedVehicleId : null,
         kpi: computeKpi(data.vehicles), status: "online", error: null}));
@@ -117,6 +139,32 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
   init: () => {
     void get().refresh();
+    void loadRouteShapes()
+    .then(shapes => {
+    const shapeIds = Object.keys(shapes);
+
+    const vehicles = Object.values(get().vehicles);
+    const vehicleRouteIds = [
+      ...new Set(
+        vehicles
+          .map(v => String(v.routeId ?? ""))
+          .filter(Boolean)
+      )
+    ];
+
+    console.log("[RouteShapes] Загруженные route_id:", shapeIds);
+    console.log("[RouteShapes] routeId автобусов:", vehicleRouteIds);
+
+    console.log(
+      "[RouteShapes] Для этих маршрутов нет shape:",
+      vehicleRouteIds.filter(id => !shapeIds.includes(id))
+    );
+
+    set({ routeShapes: shapes });
+  })
+  .catch(error => {
+    console.error("[RouteShapes] Ошибка загрузки:", error);
+  });
     const timer = setInterval(() => { void get().refresh(); }, 2000);
     const unsubscribe = subscribeRisks(() => { void get().refresh(); });
     return () => {clearInterval(timer); unsubscribe();};

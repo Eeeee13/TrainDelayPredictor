@@ -7,6 +7,8 @@ maplibregl.setWorkerUrl(workerUrl);
 import { useDashboardStore } from "@/store/dashboardStore";
 import type { RiskLevel, RouteDef, TrailPoint, Vehicle } from "@/domain/types";
 import { getBusVariant, BusVariant } from "@/utils/busVariant";
+import { buildShapeByVehicleId } from "@/utils/routeShapeLookup";
+import { snapPositionForDisplay } from "@/utils/snapToRoute";
 import { BusTopIcon } from "./BusTopIcon";
 import { useHighRiskNotifications } from "./Notifications";
 
@@ -109,6 +111,18 @@ function busTopIconMarkup(variant: BusVariant, risk: string): string {
   return renderToStaticMarkup(<BusTopIcon risk={risk as RiskLevel} variant={variant} size={MAP_ICON_BASE_SIZE} />);
 }
 
+function routeShapeFeature(shape: { lat: number; lng: number }[] | undefined): GeoJSON.FeatureCollection {
+  if (!shape) return empty();
+  return {
+    type: "FeatureCollection",
+    features: [{
+      type: "Feature",
+      properties: {},
+      geometry: { type: "LineString", coordinates: shape.map(p => [p.lng, p.lat]) }
+    }]
+  };
+}
+
 // Icon grows with zoom so the bus keeps a stable footprint relative to the map,
 // instead of the old fixed 0.8 that stayed the same pixel size regardless of zoom.
 const ICON_SIZE_EXPRESSION: maplibregl.ExpressionSpecification = [
@@ -125,6 +139,7 @@ export function BusMap() {
   const vehicles = useDashboardStore((s) => s.vehicles);
   const routes = useDashboardStore((s) => s.routes);
   const riskTrails = useDashboardStore((s) => s.riskTrails);
+  const routeShapes = useDashboardStore((s) => s.routeShapes);
   const selected = useDashboardStore((s) => s.selectedVehicleId);
   const filters = useDashboardStore((s) => s.filters);
   const selectVehicle = useDashboardStore((s) => s.selectVehicle);
@@ -148,6 +163,14 @@ export function BusMap() {
     const ids = new Set(visible.map(v => v.id));
     return Object.fromEntries(Object.entries(riskTrails).filter(([id]) => ids.has(id)));
   }, [riskTrails, visible]);
+
+  // Which route shape (if any) each vehicle should be visually snapped to.
+  // Shared with the store's trail-accumulation logic via the same utility,
+  // so the live marker and its trail always agree on the same road line.
+  const shapeByVehicleId = useMemo(
+    () => buildShapeByVehicleId(routes, vehicles, routeShapes),
+    [routes, vehicles, routeShapes]
+  );
 
   useEffect(() => {
     if (!container.current) return;
@@ -182,6 +205,20 @@ export function BusMap() {
             1, "rgba(255,69,58,0.85)"
           ]
         }
+      });
+
+      // Selected vehicle's road shape — added early so it renders under the
+      // trails/vehicles layers added below.
+      map.addSource("route-shape", { type: "geojson", data: empty() });
+      map.addLayer({
+        id: "route-shape-halo", type: "line", source: "route-shape",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#ffffff", "line-width": 9, "line-opacity": 0.5 }
+      });
+      map.addLayer({
+        id: "route-shape", type: "line", source: "route-shape",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#2f6fed", "line-width": 4, "line-opacity": 0.85, "line-dasharray": [2, 1] }
       });
 
       const imagesReady: Promise<void>[] = [];
@@ -283,6 +320,9 @@ export function BusMap() {
       if (!map.getSource("vehicles")) return;
       (map.getSource("heat") as maplibregl.GeoJSONSource).setData(heatmapFeatures(riskTrails));
       (map.getSource("trails") as maplibregl.GeoJSONSource).setData(riskTrailFeatures(visibleRiskTrails));
+      (map.getSource("route-shape") as maplibregl.GeoJSONSource).setData(
+        routeShapeFeature(selected ? shapeByVehicleId[selected] : undefined)
+      );
       const visibleIds = new Set(visible.map(v => v.id));
       (map.getSource("forecast") as maplibregl.GeoJSONSource).setData(forecastFeatures(routes.filter(r => visibleIds.has(r.vehicleId)), vehicles, selected));
       (map.getSource("vehicles") as maplibregl.GeoJSONSource).setData({
@@ -298,6 +338,8 @@ export function BusMap() {
             bearing = (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360;
           }
 
+          const displayPos = snapPositionForDisplay(v.position, shapeByVehicleId[v.id]);
+
           return {
             type: "Feature",
             properties: {
@@ -309,7 +351,7 @@ export function BusMap() {
               bearing: bearing,
               selected: v.id === selected
             },
-            geometry: { type: "Point", coordinates: [v.position.lng, v.position.lat] }
+            geometry: { type: "Point", coordinates: [displayPos.lng, displayPos.lat] }
           };
         })
       });
@@ -330,7 +372,7 @@ export function BusMap() {
       }
     };
     if (map.isStyleLoaded()) update(); else map.once("load", update);
-  }, [visible, visibleRiskTrails, riskTrails, routes, vehicles, selected, zoom]);
+  }, [visible, visibleRiskTrails, riskTrails, routes, vehicles, selected, zoom, shapeByVehicleId]);
 
   useEffect(() => {
     const { selectedVehicleId, vehicles: currentVehicles } = useDashboardStore.getState();
