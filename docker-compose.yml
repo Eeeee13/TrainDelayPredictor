@@ -57,7 +57,6 @@ services:
       APP_DATABASE_URL: postgresql+asyncpg://predictor:predictor@postgres:5432/predictor
       APP_REDIS_URL: redis://redis:6379/0
       APP_INFERENCE_URL: http://inference:8000/predict
-      APP_NDTP_UNIT_MAP: ${NDTP_UNIT_MAP:-{}}
       YANDEX_CLOUD_API_KEY: ${YANDEX_CLOUD_API_KEY:-}
       YANDEX_CLOUD_FOLDER: ${YANDEX_CLOUD_FOLDER:-b1gv2rfr13cpst5o42jr}
       YANDEX_CLOUD_MODEL: ${YANDEX_CLOUD_MODEL:-deepseek-v4-flash/latest}
