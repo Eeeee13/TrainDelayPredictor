@@ -11,8 +11,7 @@ export default function App() {
   const selectedVehicleId = useDashboardStore((s) => s.selectedVehicleId);
 
   useEffect(() => {
-    const unsubscribe = init();
-    return unsubscribe;
+    return init();
   }, [init]);
 
   return (

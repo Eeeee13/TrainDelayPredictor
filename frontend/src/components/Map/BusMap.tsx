@@ -5,9 +5,10 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 maplibregl.setWorkerUrl(workerUrl);
 import { useDashboardStore } from "@/store/dashboardStore";
-import type { RiskLevel, TrailPoint, Vehicle } from "@/domain/types";
+import type { RiskLevel, RouteDef, TrailPoint, Vehicle } from "@/domain/types";
 import { getBusVariant, BusVariant } from "@/utils/busVariant";
 import { BusTopIcon } from "./BusTopIcon";
+import { useHighRiskNotifications } from "./Notifications";
 
 /** Base pixel width the map's raster bus icons are rendered at; @2x for crisp retina rendering. */
 const MAP_ICON_BASE_SIZE = 40;
@@ -15,8 +16,8 @@ const MAP_ICON_BASE_SIZE = 40;
 const LABEL_ZOOM_THRESHOLD = 13;
 const ICON_ZOOM_THRESHOLD = 12;
 
-const colors = { low: "#30d158", medium: "#ffd60a", high: "#ff453a", unknown: "#33789d" };
-const DEFAULT_TRAIL_COLOR = colors.unknown;
+const colors = { low: "#30d158", medium: "#ffd60a", high: "#ff453a", unknown: "#8e8e93" };
+const DEFAULT_TRAIL_COLOR = colors.low;
 const VARIANTS: BusVariant[] = ["v1", "v2"];
 
 type ProblemRisk = "medium" | "high";
@@ -59,13 +60,53 @@ function riskTrailFeatures(riskTrails: Record<string, TrailPoint[]>): GeoJSON.Fe
   return { type: "FeatureCollection", features };
 }
 
+function forecastFeatures(routes: RouteDef[], vehicles: Record<string, Vehicle>, selected: string | null): GeoJSON.FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: routes.flatMap(route => {
+      const vehicle = vehicles[route.vehicleId];
+      if (!vehicle || !vehicle.targetStopId || !isProblemRisk(vehicle.risk) || (selected && selected !== vehicle.id)) return [];
+      const target = route.stops.findIndex(s => s.id === vehicle.targetStopId);
+      if (target < 0) return [];
+      const prior = route.stops.slice(0, target + 1);
+      const closest = prior.reduce((best, stop, index) => {
+        const d = (stop.position.lat - vehicle.position.lat) ** 2 + (stop.position.lng - vehicle.position.lng) ** 2;
+        return d < best.distance ? { index, distance: d } : best;
+      }, { index: 0, distance: Infinity }).index;
+      const coords = [vehicle.position, ...route.stops.slice(closest + 1, target + 1).map(s => s.position)].map(p => [p.lng, p.lat]);
+      if (coords.length < 2) coords.push([route.stops[target].position.lng, route.stops[target].position.lat]);
+      return [{
+        type: "Feature" as const,
+        properties: { color: colors[vehicle.risk as ProblemRisk], vehicleId: vehicle.id },
+        geometry: { type: "LineString" as const, coordinates: coords }
+      }];
+    })
+  };
+}
+
 /**
- * Rasterizes the actual <BusTopIcon> component for map use. BusMap has no
- * bus geometry of its own — this is the only place it touches the shape,
- * and it does so by rendering the real component, not by re-implementing it.
+ * Flattens every vehicle's accumulated risk history into weighted points for
+ * the heatmap layer — only points that were actually a problem (medium/high) count,
+ * weighted by severity, so the heat shows where delays cluster across the whole city/session,
+ * not just where buses happen to drive.
  */
-function busTopIconMarkup(variant: BusVariant, risk: RiskLevel): string {
-  return renderToStaticMarkup(<BusTopIcon risk={risk} variant={variant} size={MAP_ICON_BASE_SIZE} />);
+function heatmapFeatures(riskTrails: Record<string, TrailPoint[]>): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = [];
+  for (const points of Object.values(riskTrails)) {
+    for (const p of points) {
+      if (!isProblemRisk(p.risk)) continue;
+      features.push({
+        type: "Feature",
+        properties: { weight: p.risk === "high" ? 1 : 0.5 },
+        geometry: { type: "Point", coordinates: [p.lng, p.lat] }
+      });
+    }
+  }
+  return { type: "FeatureCollection", features };
+}
+
+function busTopIconMarkup(variant: BusVariant, risk: string): string {
+  return renderToStaticMarkup(<BusTopIcon risk={risk as RiskLevel} variant={variant} size={MAP_ICON_BASE_SIZE} />);
 }
 
 // Icon grows with zoom so the bus keeps a stable footprint relative to the map,
@@ -80,7 +121,9 @@ const ICON_SIZE_EXPRESSION: maplibregl.ExpressionSpecification = [
 ];
 
 export function BusMap() {
+  useHighRiskNotifications();
   const vehicles = useDashboardStore((s) => s.vehicles);
+  const routes = useDashboardStore((s) => s.routes);
   const riskTrails = useDashboardStore((s) => s.riskTrails);
   const selected = useDashboardStore((s) => s.selectedVehicleId);
   const filters = useDashboardStore((s) => s.filters);
@@ -118,13 +161,32 @@ export function BusMap() {
     map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
     map.on("zoom", () => setZoom(map.getZoom()));
+    // A user-initiated drag always means "I want to look elsewhere" — stop
+    // auto-following.
     map.on("dragstart", () => { followRef.current = false; });
     // map.on("zoomstart", (e) => { if (e.originalEvent) followRef.current = false; }); // zoom will turn off following
     map.on("load", () => {
+      map.addSource("heat", { type: "geojson", data: empty() });
+      map.addLayer({
+        id: "heat", type: "heatmap", source: "heat",
+        maxzoom: 15,
+        paint: {
+          "heatmap-weight": ["get", "weight"],
+          "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 10, 1, 15, 2.5],
+          "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 10, 14, 15, 28],
+          "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 10, 0.75, 15, 0],
+          "heatmap-color": [
+            "interpolate", ["linear"], ["heatmap-density"],
+            0, "rgba(51,120,157,0)",
+            0.3, "rgba(255,214,10,0.55)",
+            1, "rgba(255,69,58,0.85)"
+          ]
+        }
+      });
+
       const imagesReady: Promise<void>[] = [];
       VARIANTS.forEach((variant) => {
         (Object.keys(colors) as (RiskLevel | "unknown")[]).forEach((risk) => {
-          if (risk === "unknown") return;
           const svg = busTopIconMarkup(variant, risk);
           const dataUrl = `data:image/svg+xml;base64,${btoa(svg)}`;
           imagesReady.push(
@@ -159,10 +221,24 @@ export function BusMap() {
           "line-opacity": ["case", ["get", "problem"], 0.95, 0.7]
         }
       });
-
       map.on("click", "trails", e => { const id = e.features?.[0]?.properties?.vehicleId; if (id) selectVehicle(String(id)); });
       map.on("mouseenter", "trails", () => { map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "trails", () => { map.getCanvas().style.cursor = ""; });
+
+      map.addSource("forecast", { type: "geojson", data: empty() });
+      map.addLayer({
+        id: "forecast-halo", type: "line", source: "forecast",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#ffffff", "line-width": 11, "line-opacity": 0.92 }
+      });
+      map.addLayer({
+        id: "forecast", type: "line", source: "forecast",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": ["get", "color"], "line-width": 7, "line-opacity": 0.95, "line-dasharray": [1.2, 0.8] }
+      });
+      map.on("click", "forecast", e => { const id = e.features?.[0]?.properties?.vehicleId; if (id) selectVehicle(String(id)); });
+      map.on("mouseenter", "forecast", () => { map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "forecast", () => { map.getCanvas().style.cursor = ""; });
 
       map.addSource("vehicles", { type: "geojson", data: empty() });
       // Circle markers at low zoom — don't depend on the bus images, safe to add now
@@ -205,7 +281,10 @@ export function BusMap() {
     if (!map) return;
     const update = () => {
       if (!map.getSource("vehicles")) return;
+      (map.getSource("heat") as maplibregl.GeoJSONSource).setData(heatmapFeatures(riskTrails));
       (map.getSource("trails") as maplibregl.GeoJSONSource).setData(riskTrailFeatures(visibleRiskTrails));
+      const visibleIds = new Set(visible.map(v => v.id));
+      (map.getSource("forecast") as maplibregl.GeoJSONSource).setData(forecastFeatures(routes.filter(r => visibleIds.has(r.vehicleId)), vehicles, selected));
       (map.getSource("vehicles") as maplibregl.GeoJSONSource).setData({
         type: "FeatureCollection",
         features: visible.map(v => {
@@ -225,7 +304,7 @@ export function BusMap() {
               id: v.id,
               label: zoom >= LABEL_ZOOM_THRESHOLD ? v.garageNumber : undefined,
               color: v.risk ? colors[v.risk] : DEFAULT_TRAIL_COLOR,
-              riskKey: v.risk || "low",
+              riskKey: v.risk || "unknown",
               variant: getBusVariant(v.id),
               bearing: bearing,
               selected: v.id === selected
@@ -251,7 +330,7 @@ export function BusMap() {
       }
     };
     if (map.isStyleLoaded()) update(); else map.once("load", update);
-  }, [visible, visibleRiskTrails, selected, zoom]);
+  }, [visible, visibleRiskTrails, riskTrails, routes, vehicles, selected, zoom]);
 
   useEffect(() => {
     const { selectedVehicleId, vehicles: currentVehicles } = useDashboardStore.getState();
