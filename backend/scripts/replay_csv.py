@@ -68,6 +68,7 @@ def main() -> None:
                 "scheduled_time": csv_timestamp(s.scheduled_time),
                 "latitude": s.latitude,
                 "longitude": s.longitude,
+                "address": s.address,
                 "manual_fill": s.manual_fill,
             }
             for s in schedule

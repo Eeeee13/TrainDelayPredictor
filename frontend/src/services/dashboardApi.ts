@@ -1,6 +1,6 @@
 import type { RiskAssessment, RouteDef, Vehicle } from "@/domain/types";
 
-interface ApiStop { id: string; sequence: number; scheduled_time: string; position: {lat:number;lng:number} }
+interface ApiStop { id: string; sequence: number; address?: string | null; scheduled_time: string; position: {lat:number;lng:number} }
 interface ApiRoute { id: string; vehicle_id: string; short_name: string; stops: ApiStop[] }
 interface ApiVehicle {
   vehicle_id: string; tr_id: number; position: {lat:number;lng:number}; speed_kmh: number;
@@ -20,6 +20,7 @@ export async function fetchDashboard(): Promise<{vehicles: Vehicle[]; routes: Ro
     routes: data.routes.map((route) => ({
       id: route.id, vehicleId: route.vehicle_id, shortName: route.short_name,
       stops: route.stops.map((stop) => ({id: stop.id, sequence: stop.sequence,
+        address: stop.address?.trim() || null,
         scheduledTime: utc(stop.scheduled_time), position: stop.position}))
     })),
     vehicles: data.vehicles.map((v) => ({

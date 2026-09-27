@@ -21,8 +21,11 @@ export function useHighRiskNotifications() {
         const was = prevRisk.current[v.id];
         if (v.risk === "high" && was !== "high") {
           const minutes = v.predictedDelaySeconds !== null ? Math.round(v.predictedDelaySeconds / 60) : null;
+          const ahead = minutes !== null && minutes < 0;
           new Notification(`Высокий риск — ${v.garageNumber}`, {
-            body: minutes !== null ? `Прогнозируемое опоздание ~${minutes} мин` : "Прогноз формируется",
+            body: minutes !== null
+              ? `Прогнозируемое ${ahead ? "опережение" : "опоздание"} ~${Math.abs(minutes)} мин`
+              : "Прогноз формируется",
             tag: `risk-high-${v.id}`, // replaces any earlier notification for this same vehicle instead of stacking
             silent: false
           });

@@ -84,6 +84,7 @@ async def ingest_schedule(batch: ScheduleBatchIn, session: AsyncSession = Depend
             scheduled_time=utc_naive(s.scheduled_time),
             latitude=s.latitude,
             longitude=s.longitude,
+            address=s.address,
             manual_fill=s.manual_fill,
         )
         for s in batch.stops

@@ -3,6 +3,8 @@ import { useDashboardStore } from "@/store/dashboardStore";
 import { getBusVariant } from "@/utils/busVariant";
 import busV1Front from "../../assets/bus-v1-front.png";
 import busV2Front from "../../assets/bus-v2-front.png";
+import { incidentTitle } from "@/utils/riskLabel";
+import { stopLabel } from "@/utils/stopLabel";
 
 export function DrillDownPanel() {
   const selectedVehicleId = useDashboardStore((s) => s.selectedVehicleId);
@@ -77,7 +79,7 @@ export function DrillDownPanel() {
               : "bg-risk-mid/10 border-risk-mid/20 text-risk-mid"
           }`}
         >
-          {vehicle.risk === "high" ? "Инцидент: высокий риск опоздания" : "Инцидент: средний риск опоздания"}
+          {incidentTitle(vehicle.risk, vehicle.predictedDelaySeconds)}
         </div>
       )}
 
@@ -122,8 +124,8 @@ export function DrillDownPanel() {
       <div className="flex-1 overflow-y-auto">
       <div className="px-4 py-3">
         <div className="text-[10px] uppercase text-gray-600 mb-1.5">Проблемный участок</div>
-        <div className="text-sm  text-gray-800">
-          {target ? `До остановки №${target.sequence}` : "Целевая остановка пока не определена"}
+        <div className="text-sm text-gray-800 break-words">
+          {target ? `До остановки ${stopLabel(target)}` : "Целевая остановка пока не определена"}
         </div>
         <div className="text-xs text-gray-600 mt-1">
           {vehicle.targetTime ? `Плановое прибытие: ${new Date(vehicle.targetTime).toLocaleString("ru-RU")}` : "Прогноз появится при входе в горизонт 10–15 минут"}
@@ -149,8 +151,8 @@ export function DrillDownPanel() {
         <div className="text-[10px] uppercase text-gray-600 mb-1.5">Ближайшие остановки</div>
         <div className="flex flex-col gap-1">
           {route?.stops.slice(0, 5).map((stop) => (
-            <div key={stop.id} className={`flex justify-between text-xs ${stop.id === vehicle.targetStopId ? "text-risk-high font-semibold" : "text-gray-600"}`}>
-              <span>№{stop.sequence}</span>
+            <div key={stop.id} className={`flex justify-between gap-2 text-xs ${stop.id === vehicle.targetStopId ? "text-risk-high font-semibold" : "text-gray-600"}`}>
+              <span className="min-w-0 truncate">{stopLabel(stop)}</span>
               <time>{new Date(stop.scheduledTime).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</time>
             </div>
           ))}

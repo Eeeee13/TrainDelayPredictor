@@ -17,6 +17,7 @@ export interface LatLng {
 export interface Stop {
   id: string;
   sequence: number;
+  address: string | null;
   scheduledTime: string;
   position: LatLng
 }

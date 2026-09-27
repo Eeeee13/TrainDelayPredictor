@@ -3,6 +3,8 @@ import { useDashboardStore } from "@/store/dashboardStore";
 import { BusList } from "./BusList";
 import { FilterBar } from "@/components/Filters/FilterBar";
 import { NotificationToggle } from "@/components/Map/Notifications";
+import { isAhead } from "@/utils/riskLabel";
+import { stopLabel } from "@/utils/stopLabel";
 
 type Tab = "buses" | "alerts";
 
@@ -14,6 +16,8 @@ export function SidePanel() {
   const routes = useDashboardStore((s) => s.routes);
   const selectedVehicleId = useDashboardStore((s) => s.selectedVehicleId);
   const selectVehicle = useDashboardStore((s) => s.selectVehicle);
+  const query = useDashboardStore((s) => s.filters.query);
+  const setFilters = useDashboardStore((s) => s.setFilters);
   const alerts = Object.values(vehicles)
     .filter(v => v.risk === "high" || v.risk === "medium")
     .sort((a, b) => (severityRank[b.risk!] - severityRank[a.risk!]) || (b.predictedDelaySeconds ?? 0) - (a.predictedDelaySeconds ?? 0));
@@ -45,7 +49,27 @@ export function SidePanel() {
       </div>
 
       {tab === "buses" && (
-        <div className="px-2.5 pt-2">
+        <div className="px-2.5 pt-2 space-y-2">
+          <div className="relative">
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setFilters({ query: event.target.value })}
+              placeholder="Поиск по борту"
+              aria-label="Поиск по борту"
+              className="w-full rounded-xl bg-gray-100 py-1.5 pl-3 pr-7 text-xs text-gray-800 outline-none placeholder:text-gray-500 focus:ring-1 focus:ring-gray-300 [&::-webkit-search-cancel-button]:hidden"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setFilters({ query: "" })}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs leading-none text-gray-500 hover:text-gray-800"
+                aria-label="Очистить поиск"
+              >
+                ✕
+              </button>
+            )}
+          </div>
           <FilterBar />
         </div>
       )}
@@ -76,9 +100,13 @@ export function SidePanel() {
                     <div className="text-sm font-semibold text-gray-800 truncate">
                       Борт {v.garageNumber}{route?.shortName ? ` · Маршрут ${route.shortName}` : ""}
                     </div>
-                    <p className="mt-1 text-xs text-gray-600">Прогноз опоздания +{Math.round((v.predictedDelaySeconds ?? 0) / 60)} мин</p>
+                    <p className="mt-1 text-xs text-gray-600">
+                      {isAhead(v.predictedDelaySeconds)
+                        ? `Прогноз опережения ${Math.abs(Math.round((v.predictedDelaySeconds ?? 0) / 60))} мин`
+                        : `Прогноз опоздания +${Math.round((v.predictedDelaySeconds ?? 0) / 60)} мин`}
+                    </p>
                     {target && (
-                      <p className="mt-0.5 text-[11px] text-gray-500">До остановки №{target.sequence}</p>
+                      <p className="mt-0.5 text-[11px] text-gray-500 break-words">До остановки {stopLabel(target)}</p>
                     )}
                   </div>
                 </button>

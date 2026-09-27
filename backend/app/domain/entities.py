@@ -45,6 +45,7 @@ class ScheduleStop:
     scheduled_time: datetime
     latitude: float | None = None
     longitude: float | None = None
+    address: str | None = None
     manual_fill: bool = False
 
 

@@ -1,11 +1,6 @@
 import { RouteDef, Vehicle } from "@/domain/types";
+import { riskPhrase } from "@/utils/riskLabel";
 import { BusSideIcon } from "./BusSideIcon";
-
-const RISK_TEXT: Record<Exclude<Vehicle["risk"], null>, string> = {
-  low: "по графику",
-  medium: "небольшое отставание",
-  high: "риск опоздания"
-};
 
 const RISK_BG_COLOR: Record<Exclude<Vehicle["risk"], null>, string> = {
   low: "rgba(48, 209, 88, 0.1)",
@@ -40,16 +35,16 @@ export function BusCard({ vehicle, route, selected, onSelect }: Props) {
             Борт {vehicle.garageNumber}
           </span>
         </div>
-        <div className="text-xs text-gray-600 truncate">{vehicle.risk ? RISK_TEXT[vehicle.risk] : "Ожидает прогноза"}</div>
+        <div className="text-xs text-gray-600 truncate">{vehicle.risk ? riskPhrase(vehicle.risk, vehicle.predictedDelaySeconds) : "Ожидает прогноза"}</div>
         {vehicle.delayProbability != null && (
           <div className="text-[10px] text-gray-600 tabular-nums mt-0.5">
             Вероятность &gt;2 мин: {Math.round(vehicle.delayProbability * 100)}%
           </div>
         )}
       </div>
-      {minutes > 0 && (
+      {minutes !== 0 && (
         <div className="text-xs font-semibold text-risk-high tabular-nums shrink-0">
-          +{minutes} мин
+          {minutes > 0 ? `+${minutes}` : minutes} мин
         </div>
       )}
     </button>

@@ -48,6 +48,7 @@ class ScheduleStopORM(Base):
     scheduled_time: Mapped[dt.datetime] = mapped_column(DateTime, nullable=False)
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    address: Mapped[str | None] = mapped_column(String(512), nullable=True)
     route_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     vehicle_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     manual_fill: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

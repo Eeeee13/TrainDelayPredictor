@@ -13,6 +13,17 @@ def test_organizer_csv_columns(tmp_path):
     stops = list(read_schedule_csv(str(schedule)))
     assert [(s.stop_id, s.seq) for s in stops] == [(1, 0), (2, 1)]
     assert (stops[1].longitude, stops[1].latitude, stops[1].manual_fill) == (37.5, 55.7, True)
+    assert stops[0].address is None
+
+    addressed = tmp_path / "addressed.csv"
+    addressed.write_text(
+        "tt_action_item_id,time_begin,manual_fill,tr_id,geom,building_address\n"
+        '1,2026-01-06 12:00:00,False,7,POINT (37.4 55.6),"Ярцевская ул., д.25"\n'
+        "2,2026-01-06 12:10:00,True,7,POINT (37.5 55.7),\n"
+    )
+    with_address = list(read_schedule_csv(str(addressed)))
+    assert with_address[0].address == "Ярцевская ул., д.25"
+    assert with_address[1].address is None
 
     traffic = tmp_path / "traffic.csv"
     traffic.write_text("tr_id,event_time,location_valid,lon,lat,speed\n"

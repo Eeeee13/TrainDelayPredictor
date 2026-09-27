@@ -36,7 +36,7 @@ async def test_dashboard_uses_valid_position_and_fresh_prediction(sqlite_session
             TelemetryRecordORM(vehicle_id="bus-1", tr_id=7, event_time=now-dt.timedelta(minutes=5), latitude=55.74, longitude=37.60, speed=20, location_valid=True),
             TelemetryRecordORM(vehicle_id="bus-1", tr_id=7, event_time=now-dt.timedelta(minutes=3), latitude=1, longitude=1, speed=0, location_valid=False),
             ScheduleStopORM(tr_id=7, stop_id=11, seq=1, scheduled_time=now-dt.timedelta(minutes=3), latitude=55.75, longitude=37.61),
-            ScheduleStopORM(tr_id=7, stop_id=12, seq=2, scheduled_time=now+dt.timedelta(minutes=10), latitude=55.76, longitude=37.62),
+            ScheduleStopORM(tr_id=7, stop_id=12, seq=2, scheduled_time=now+dt.timedelta(minutes=10), latitude=55.76, longitude=37.62, address="Ярцевская ул., д.25, к.3"),
             RiskAssessmentORM(vehicle_id="bus-1", tr_id=7, target_stop_id=12, target_time_begin=now+dt.timedelta(minutes=10), predicted_at=now-dt.timedelta(minutes=5), predicted_delay_s=350, risk_level="high", reason="delay", source="model"),
         ])
         await session.commit()
@@ -49,6 +49,7 @@ async def test_dashboard_uses_valid_position_and_fresh_prediction(sqlite_session
     ]
     assert result["vehicles"][0]["risk"]["risk_level"] == "high"
     assert [stop["id"] for stop in result["routes"][0]["stops"]] == ["11", "12"]
+    assert result["routes"][0]["stops"][1]["address"] == "Ярцевская ул., д.25, к.3"
 
 
 @pytest.mark.asyncio

@@ -25,6 +25,7 @@ class ScheduleRepository:
                 scheduled_time=s.scheduled_time,
                 latitude=s.latitude,
                 longitude=s.longitude,
+                address=s.address,
                 route_id=route_id,
                 vehicle_id=vehicle_id,
                 manual_fill=s.manual_fill,
@@ -34,7 +35,7 @@ class ScheduleRepository:
         bind = self._session.get_bind()
         if bind.dialect.name == "postgresql":
             # asyncpg allows at most 32767 bind parameters per statement.
-            # Nine columns per stop: 1000 rows stays comfortably below that limit.
+            # Ten columns per stop: 1000 rows stays comfortably below that limit.
             for offset in range(0, len(rows), 1000):
                 stmt = pg_insert(ScheduleStopORM).values(rows[offset:offset + 1000])
                 stmt = stmt.on_conflict_do_update(
@@ -44,6 +45,7 @@ class ScheduleRepository:
                         scheduled_time=stmt.excluded.scheduled_time,
                         latitude=stmt.excluded.latitude,
                         longitude=stmt.excluded.longitude,
+                        address=stmt.excluded.address,
                         manual_fill=stmt.excluded.manual_fill,
                     ),
                 )
@@ -83,6 +85,7 @@ class ScheduleRepository:
                 scheduled_time=row.scheduled_time,
                 latitude=row.latitude,
                 longitude=row.longitude,
+                address=row.address,
                 manual_fill=row.manual_fill,
             )
             for row in result.scalars().all()
@@ -100,6 +103,7 @@ class ScheduleRepository:
                 scheduled_time=row.scheduled_time,
                 latitude=row.latitude,
                 longitude=row.longitude,
+                address=row.address,
                 manual_fill=row.manual_fill,
             )
             for row in result.scalars().all()

@@ -60,10 +60,13 @@ def read_schedule_csv(path: str) -> Iterator[ScheduleStop]:
     df["seq"] = df.groupby("tr_id").cumcount()
     for row in df.itertuples(index=False):
         match = _POINT.fullmatch(str(row.geom))
+        raw_address = getattr(row, "building_address", None)
+        address = None if raw_address is None or pd.isna(raw_address) else str(raw_address).strip() or None
         yield ScheduleStop(
             tr_id=int(row.tr_id), stop_id=int(row.tt_action_item_id), seq=int(row.seq),
             scheduled_time=row.time_begin.to_pydatetime(),
             latitude=float(match.group(2)) if match else None,
             longitude=float(match.group(1)) if match else None,
+            address=address,
             manual_fill=str(row.manual_fill).lower() == "true",
         )

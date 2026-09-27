@@ -125,6 +125,7 @@ async def snapshot(container: Container = Depends(get_container)) -> dict:
                 "short_name": window[0].route_id or str(point.tr_id),
                 "stops": [
                     {"id": str(stop.stop_id), "sequence": stop.seq,
+                     "address": stop.address,
                      "scheduled_time": stop.scheduled_time.isoformat(),
                      "position": {"lat": stop.latitude, "lng": stop.longitude}}
                     for stop in window
