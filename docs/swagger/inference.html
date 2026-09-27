@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Inference API</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+  <style>body { margin: 0; }</style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    window.onload = () => {
+      window.ui = SwaggerUIBundle({
+        spec: {"openapi": "3.1.0", "info": {"title": "delay-inference", "version": "0.1.0"}, "paths": {"/health": {"get": {"summary": "Health", "operationId": "health_health_get", "responses": {"200": {"description": "Successful Response", "content": {"application/json": {"schema": {"type": "object", "title": "Response Health Health Get"}}}}}}}, "/model/info": {"get": {"summary": "Model Info", "operationId": "model_info_model_info_get", "responses": {"200": {"description": "Successful Response", "content": {"application/json": {"schema": {"type": "object", "title": "Response Model Info Model Info Get"}}}}}}}, "/predict": {"post": {"summary": "Predict", "operationId": "predict_predict_post", "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/PredictBatch"}}}, "required": true}, "responses": {"200": {"description": "Successful Response", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PredictOutput"}}}}, "422": {"description": "Validation Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}}}}}}}, "components": {"schemas": {"HTTPValidationError": {"properties": {"detail": {"items": {"$ref": "#/components/schemas/ValidationError"}, "type": "array", "title": "Detail"}}, "type": "object", "title": "HTTPValidationError"}, "PredictBatch": {"properties": {"items": {"items": {"$ref": "#/components/schemas/PredictItem"}, "type": "array", "title": "Items"}}, "type": "object", "required": ["items"], "title": "PredictBatch"}, "PredictItem": {"properties": {"request_id": {"type": "string", "title": "Request Id"}, "tr_id": {"type": "integer", "title": "Tr Id"}, "T": {"type": "string", "format": "date-time", "title": "T"}, "cur_dev_s": {"type": "number", "title": "Cur Dev S"}, "target_stop_id": {"type": "integer", "title": "Target Stop Id"}, "target_time_begin": {"type": "string", "format": "date-time", "title": "Target Time Begin"}}, "type": "object", "required": ["request_id", "tr_id", "T", "cur_dev_s", "target_stop_id", "target_time_begin"], "title": "PredictItem"}, "PredictOutput": {"properties": {"items": {"items": {"$ref": "#/components/schemas/PredictOutputItem"}, "type": "array", "title": "Items"}}, "type": "object", "required": ["items"], "title": "PredictOutput"}, "PredictOutputItem": {"properties": {"request_id": {"type": "string", "title": "Request Id"}, "predicted_delay_s": {"type": "number", "title": "Predicted Delay S"}, "confidence": {"anyOf": [{"type": "number"}, {"type": "null"}], "title": "Confidence"}, "delay_probability": {"anyOf": [{"type": "number", "maximum": 1.0, "minimum": 0.0}, {"type": "null"}], "title": "Delay Probability", "description": "Probability of delay strictly greater than 120 seconds at the target stop."}, "model_version": {"type": "string", "title": "Model Version"}}, "type": "object", "required": ["request_id", "predicted_delay_s", "model_version"], "title": "PredictOutputItem"}, "ValidationError": {"properties": {"loc": {"items": {"anyOf": [{"type": "string"}, {"type": "integer"}]}, "type": "array", "title": "Location"}, "msg": {"type": "string", "title": "Message"}, "type": {"type": "string", "title": "Error Type"}}, "type": "object", "required": ["loc", "msg", "type"], "title": "ValidationError"}}}},
+        dom_id: "#swagger-ui",
+        deepLinking: true,
+      });
+    };
+  </script>
+</body>
+</html>

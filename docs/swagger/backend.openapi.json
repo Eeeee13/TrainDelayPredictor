@@ -1,0 +1,923 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "predictor-backend",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Ready",
+        "operationId": "ready_health_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Ready Health Ready Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dashboard/snapshot": {
+      "get": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Snapshot",
+        "operationId": "snapshot_dashboard_snapshot_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Snapshot Dashboard Snapshot Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ingest/replay-clock": {
+      "post": {
+        "tags": [
+          "ingestion"
+        ],
+        "summary": "Set Replay Clock",
+        "operationId": "set_replay_clock_ingest_replay_clock_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplayClockIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Set Replay Clock Ingest Replay Clock Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ingest/replay-clock/pause": {
+      "post": {
+        "tags": [
+          "ingestion"
+        ],
+        "summary": "Pause Replay Clock",
+        "operationId": "pause_replay_clock_ingest_replay_clock_pause_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Pause Replay Clock Ingest Replay Clock Pause Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ingest/replay-clock/resume-live": {
+      "post": {
+        "tags": [
+          "ingestion"
+        ],
+        "summary": "Resume Live Clock",
+        "operationId": "resume_live_clock_ingest_replay_clock_resume_live_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Resume Live Clock Ingest Replay Clock Resume Live Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ingest/telemetry": {
+      "post": {
+        "tags": [
+          "ingestion"
+        ],
+        "summary": "Ingest Telemetry",
+        "operationId": "ingest_telemetry_ingest_telemetry_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TelemetryBatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestAck"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ingest/schedule": {
+      "post": {
+        "tags": [
+          "ingestion"
+        ],
+        "summary": "Ingest Schedule",
+        "operationId": "ingest_schedule_ingest_schedule_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleBatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestAck"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vehicles/{vehicle_id}/deviation": {
+      "get": {
+        "tags": [
+          "vehicles"
+        ],
+        "summary": "Get Deviation",
+        "description": "The raw, non-ML deviation signal (Matching Engine output) - also the\nexact fallback value the model degrades to when unavailable.",
+        "operationId": "get_deviation_vehicles__vehicle_id__deviation_get",
+        "parameters": [
+          {
+            "name": "vehicle_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Vehicle Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VehicleDeviationOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vehicles/{vehicle_id}/report": {
+      "post": {
+        "tags": [
+          "vehicles"
+        ],
+        "summary": "Vehicle Report",
+        "description": "Aggregates the trip, asks the model for a commentary, and returns a PDF.",
+        "operationId": "vehicle_report_vehicles__vehicle_id__report_post",
+        "parameters": [
+          {
+            "name": "vehicle_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Vehicle Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/risk": {
+      "get": {
+        "tags": [
+          "predictions"
+        ],
+        "summary": "List Risk",
+        "description": "Served straight from the in-memory StateCache - no DB round trip -\nsince this is the endpoint a dashboard hits for its initial load and\nlatency matters.",
+        "operationId": "list_risk_risk_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RiskAssessmentOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Risk Risk Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/risk/{vehicle_id}": {
+      "get": {
+        "tags": [
+          "predictions"
+        ],
+        "summary": "Get Risk",
+        "operationId": "get_risk_risk__vehicle_id__get",
+        "parameters": [
+          {
+            "name": "vehicle_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Vehicle Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskAssessmentOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/risk/recompute": {
+      "post": {
+        "tags": [
+          "predictions"
+        ],
+        "summary": "Recompute",
+        "description": "Forces an immediate scheduler pass instead of waiting for the next\ntick - mainly useful for demos and for the jury to see the pipeline\nreact on demand.",
+        "operationId": "recompute_risk_recompute_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecomputeResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ndtp-mapping": {
+      "get": {
+        "tags": [
+          "ndtp-mapping"
+        ],
+        "summary": "Get Mapping",
+        "description": "Get current NDTP unit_id to tr_id mapping.",
+        "operationId": "get_mapping_ndtp_mapping_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Get Mapping Ndtp Mapping Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ndtp-mapping"
+        ],
+        "summary": "Set Mapping",
+        "description": "Set NDTP unit_id to tr_id mapping.",
+        "operationId": "set_mapping_ndtp_mapping_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object",
+                "title": "Mapping"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Set Mapping Ndtp Mapping Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ndtp-mapping"
+        ],
+        "summary": "Clear Mapping",
+        "description": "Clear NDTP unit_id to tr_id mapping.",
+        "operationId": "clear_mapping_ndtp_mapping_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Clear Mapping Ndtp Mapping Delete"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "IngestAck": {
+        "properties": {
+          "accepted": {
+            "type": "integer",
+            "title": "Accepted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "accepted"
+        ],
+        "title": "IngestAck"
+      },
+      "RecomputeResult": {
+        "properties": {
+          "predictions_made": {
+            "type": "integer",
+            "title": "Predictions Made",
+            "description": "number of RiskAssessments (re)computed in this pass"
+          }
+        },
+        "type": "object",
+        "required": [
+          "predictions_made"
+        ],
+        "title": "RecomputeResult"
+      },
+      "ReplayClockIn": {
+        "properties": {
+          "start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start"
+          },
+          "speed": {
+            "type": "number",
+            "title": "Speed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "speed"
+        ],
+        "title": "ReplayClockIn"
+      },
+      "RiskAssessmentOut": {
+        "properties": {
+          "vehicle_id": {
+            "type": "string",
+            "title": "Vehicle Id"
+          },
+          "tr_id": {
+            "type": "integer",
+            "title": "Tr Id"
+          },
+          "target_stop_id": {
+            "type": "integer",
+            "title": "Target Stop Id"
+          },
+          "target_time_begin": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Target Time Begin"
+          },
+          "predicted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Predicted At"
+          },
+          "predicted_delay_s": {
+            "type": "number",
+            "title": "Predicted Delay S"
+          },
+          "risk_level": {
+            "type": "string",
+            "title": "Risk Level"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "delay_probability": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delay Probability",
+            "description": "Probability of delay strictly greater than 120 seconds at the target stop."
+          }
+        },
+        "type": "object",
+        "required": [
+          "vehicle_id",
+          "tr_id",
+          "target_stop_id",
+          "target_time_begin",
+          "predicted_at",
+          "predicted_delay_s",
+          "risk_level",
+          "reason",
+          "source"
+        ],
+        "title": "RiskAssessmentOut"
+      },
+      "ScheduleBatchIn": {
+        "properties": {
+          "stops": {
+            "items": {
+              "$ref": "#/components/schemas/ScheduleStopIn"
+            },
+            "type": "array",
+            "title": "Stops"
+          },
+          "route_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Id"
+          },
+          "vehicle_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vehicle Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stops"
+        ],
+        "title": "ScheduleBatchIn"
+      },
+      "ScheduleStopIn": {
+        "properties": {
+          "tr_id": {
+            "type": "integer",
+            "title": "Tr Id"
+          },
+          "stop_id": {
+            "type": "integer",
+            "title": "Stop Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq"
+          },
+          "scheduled_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Scheduled Time"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "manual_fill": {
+            "type": "boolean",
+            "title": "Manual Fill",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "tr_id",
+          "stop_id",
+          "seq",
+          "scheduled_time"
+        ],
+        "title": "ScheduleStopIn"
+      },
+      "TelemetryBatchIn": {
+        "properties": {
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/TelemetryRecordIn"
+            },
+            "type": "array",
+            "title": "Records"
+          }
+        },
+        "type": "object",
+        "required": [
+          "records"
+        ],
+        "title": "TelemetryBatchIn"
+      },
+      "TelemetryRecordIn": {
+        "properties": {
+          "vehicle_id": {
+            "type": "string",
+            "title": "Vehicle Id"
+          },
+          "event_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Event Time"
+          },
+          "latitude": {
+            "type": "number",
+            "title": "Latitude"
+          },
+          "longitude": {
+            "type": "number",
+            "title": "Longitude"
+          },
+          "speed": {
+            "type": "number",
+            "title": "Speed",
+            "default": 0.0
+          },
+          "door_open": {
+            "type": "boolean",
+            "title": "Door Open",
+            "default": false
+          },
+          "tr_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tr Id"
+          },
+          "location_valid": {
+            "type": "boolean",
+            "title": "Location Valid",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "vehicle_id",
+          "event_time",
+          "latitude",
+          "longitude"
+        ],
+        "title": "TelemetryRecordIn"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VehicleDeviationOut": {
+        "properties": {
+          "vehicle_id": {
+            "type": "string",
+            "title": "Vehicle Id"
+          },
+          "tr_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tr Id"
+          },
+          "cur_dev_s": {
+            "type": "integer",
+            "title": "Cur Dev S"
+          },
+          "last_matched_stop_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Matched Stop Id"
+          },
+          "avg_speed_segment": {
+            "type": "number",
+            "title": "Avg Speed Segment"
+          },
+          "last_event_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Event Time"
+          },
+          "is_stationary": {
+            "type": "boolean",
+            "title": "Is Stationary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "vehicle_id",
+          "tr_id",
+          "cur_dev_s",
+          "last_matched_stop_id",
+          "avg_speed_segment",
+          "last_event_time",
+          "is_stationary"
+        ],
+        "title": "VehicleDeviationOut"
+      }
+    }
+  }
+}

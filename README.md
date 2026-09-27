@@ -28,8 +28,8 @@ Aggregator, REST + WebSocket для дашборда. Postgres как БД, со
 docker compose up --build
 
 curl http://localhost:8000/health
-curl http://localhost:8001/health   # inference stub
-open http://localhost:8000/docs     # Swagger
+docker compose exec backend curl -fs http://inference:8000/health
+open http://localhost:8000/docs     # Swagger backend
 ```
 
 ### Демо без датасета (для быстрой проверки логики за секунды)
@@ -64,12 +64,7 @@ python -m scripts.replay_csv --traffic traffic.csv --schedule schedule.csv \
 заголовки `traffic.csv`/`schedule.csv` — остальной пайплайн не зависит от
 формата CSV (Matching Engine получает уже нормализованные сущности).
 
-Готового NDTP-эмулятора хакатона в репозитории нет (выдаётся
-организаторами на старте) — вместо него backend принимает уже
-нормализованные JSON-батчи через `POST /ingest/telemetry`. Под сырой
-бинарный NDTP нужен отдельный парсер-адаптер перед этим эндпоинтом (или
-внутри него) — самое изолированное место для его добавления, не
-затрагивающее остальной пайплайн.
+Сырой NDTP принимает TCP-сервер backend на порту `9201`. Пример конфигурации эмулятора — `emulator_sample_config.json`. Нормализованные JSON-батчи по-прежнему можно отправить через `POST /ingest/telemetry`.
 
 ---
 
@@ -175,11 +170,10 @@ backend/
 
 ```bash
 export DATASET_PATH=/absolute/path/to/dataset
-export NDTP_UNIT_MAP='{"985940":131672,"893159":122048,"896671":130072}'
 docker compose up --build
 ```
 
-Frontend: `http://localhost:3000`; backend API и Swagger: `http://localhost:8000/docs`; ML API: `http://localhost:8001/docs`; Airflow: `http://localhost:8080`. PostgreSQL и Redis запускаются вместе с ними. При первом старте Airflow `standalone` выводит пароль администратора в свои логи. DAG `delay_retraining` запускается каждые пять минут и допускает ручной запуск.
+Дашборд: `http://localhost` (порт 80). Backend API и Swagger: `http://localhost:8000/docs`. Приёмник NDTP: порт `9201`. PostgreSQL, Redis, inference и Airflow наружу не публикуются: к модели с хоста обращаются через сеть Compose, `http://inference:8000`. При первом старте Airflow `standalone` выводит пароль администратора в `docker compose logs airflow`. DAG `delay_retraining` запускается каждые пять минут и допускает ручной запуск.
 
 ### Исторический replay
 
@@ -196,13 +190,21 @@ Replay сохраняет даты датасета и выставляет ви
 
 ### Эмулятор NDTP
 
-TCP-приёмник backend слушает порт `9201`. Задайте в окружении backend `APP_NDTP_UNIT_MAP` как JSON: ключ — `unitId` эмулятора, значение — `tr_id` транспортного средства. Пример выше использует реальные пары из `traffic.csv`: `985940 → 131672`, `893159 → 122048`, `896671 → 130072`. Те же `unitId` укажите в `POST /api/config` эмулятора с `targetHost=host.docker.internal`, `targetPort=9201`. Эмулятор с `autoGenerate: true` создаёт случайное движение около Москвы; это проверка живого приёма и GPS-трека, а не воспроизведение маршрута из CSV. Для прогноза нужны согласованные с текущим временем плановые остановки в ближайшие 10–15 минут и телеметрия вдоль их маршрута. Исторические факты для обучения поступают через Airflow, поскольку эмулятор их не передаёт.
+TCP-приёмник backend слушает порт `9201`. Соответствие `unitId` эмулятора и `tr_id` рейса хранится в Redis и задаётся через API, а не переменной окружения:
+
+```bash
+curl -X POST http://localhost:8000/ndtp-mapping \
+  -H 'content-type: application/json' \
+  -d '{"893159":122048}'
+```
+
+Ключ — `unitId`, значение — `tr_id`. `GET /ndtp-mapping` возвращает текущую карту, `DELETE /ndtp-mapping` очищает её. Тело конфигурации самого эмулятора лежит в `emulator_sample_config.json`: `targetHost=host.docker.internal`, `targetPort=9201`, у блоков `autoGenerate: true`. Это проверка живого приёма и GPS-трека, а не воспроизведение маршрута из CSV. Для прогноза нужны согласованные с текущим временем плановые остановки в ближайшие 10–15 минут и телеметрия вдоль их маршрута. Исторические факты для обучения поступают через Airflow, поскольку эмулятор их не передаёт.
 
 ### Модель и переобучение
 
 Сервис inference читает телеметрию и плановые остановки из PostgreSQL с ролью `inference_ro`, у которой есть только `SELECT`. В начале он использует `model/model.txt`. Airflow постепенно открывает исторические записи `train`, строит признаки готовым кодом `training/train.py`, оценивает кандидата на неизменном `test` и при улучшении записывает `active.json` в общий volume. Сервис подхватывает новую модель при следующем запросе; при ошибке загрузки продолжает использовать предыдущую. Список артефактов версий находится в volume `models`. Для отката на существующую версию: `docker compose exec airflow python -m ml_pipeline.rollback VERSION`.
 
-Для прямой проверки ML API отправьте `POST http://localhost:8001/predict` в формате:
+Для прямой проверки ML API отправьте запрос из сети Compose, например `docker compose exec backend curl -s http://inference:8000/predict`, в формате:
 
 ```json
 {"items":[{"request_id":"demo-1","tr_id":131672,"T":"2026-01-06T00:35:00Z","cur_dev_s":274,"target_stop_id":53700172828,"target_time_begin":"2026-01-06T00:50:00Z"}]}
@@ -212,7 +214,7 @@ TCP-приёмник backend слушает порт `9201`. Задайте в �
 
 ## Диспетчерский интерфейс
 
-После `docker compose up --build` откройте `http://localhost:3000`. Frontend
+После `docker compose up --build` откройте `http://localhost`. Frontend
 раздаётся Nginx, который проксирует `/dashboard/snapshot` и `/ws/risk` в backend.
 Карта показывает активные ТС и их пройденный за последние 30 минут путь по
 валидным GPS-точкам. Пунктиром выделяется приблизительный участок до целевой
