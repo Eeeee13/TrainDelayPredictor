@@ -81,9 +81,21 @@ class HttpInferenceClient(InferenceClient):
             ]
         }
         async with httpx.AsyncClient(timeout=self._timeout_s) as client:
-            resp = await client.post(self._url, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
+            started = time.perf_counter()
+            outcome = "ok"
+            try:
+                resp = await client.post(self._url, json=payload)
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception as exc:
+                outcome = type(exc).__name__
+                raise
+            finally:
+                logger.info(
+                    "inference_http items=%d vehicles=%d elapsed_ms=%.3f outcome=%s",
+                    len(items), len({item.tr_id for item in items}),
+                    (time.perf_counter() - started) * 1000, outcome,
+                )
         by_id = {row["request_id"]: row for row in data["items"]}
         results = []
         for item in items:

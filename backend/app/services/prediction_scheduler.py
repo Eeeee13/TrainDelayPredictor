@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import time
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -97,7 +98,15 @@ class PredictionScheduler:
                 return 0
 
             items = [self._features.build(c.state, c.target, now) for c in candidates]
+            inference_started = time.perf_counter()
             results = await self._inference.predict_batch(items)
+            logger.info(
+                "inference_batch items=%d vehicles=%d elapsed_ms=%.3f model=%d fallback=%d",
+                len(items), len({item.tr_id for item in items}),
+                (time.perf_counter() - inference_started) * 1000,
+                sum(result.source.value == "model" for result in results),
+                sum(result.source.value == "fallback" for result in results),
+            )
             results_by_id = {r.request_id: r for r in results}
 
             pred_repo = PredictionRepository(session)

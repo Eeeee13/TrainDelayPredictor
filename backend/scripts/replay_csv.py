@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
+from pathlib import Path
 import time
 from zoneinfo import ZoneInfo
 
@@ -27,6 +29,9 @@ def main() -> None:
     parser.add_argument("--backend", default="http://localhost:8000")
     parser.add_argument("--speed", type=float, default=30.0, help="playback speed multiplier")
     parser.add_argument("--batch-size", type=int, default=50)
+    parser.add_argument("--http-timeout", type=float, default=10,
+                        help="CSV sender timeout only; does not change ML timeout")
+    parser.add_argument("--metrics-output", help="write request timings and actual playback speed as JSON")
     parser.add_argument("--vehicle", type=int, help="replay one tr_id for a short demo")
     parser.add_argument("--max-points", type=int, help="stop after this many telemetry fixes")
     parser.add_argument("--start-at", type=dt.datetime.fromisoformat,
@@ -37,8 +42,8 @@ def main() -> None:
                         help="freeze virtual time after replay so the last map frame stays visible")
     args = parser.parse_args()
 
-    if args.speed <= 0 or args.batch_size <= 0:
-        parser.error("--speed and --batch-size must be positive")
+    if args.speed <= 0 or args.batch_size <= 0 or args.http_timeout <= 0:
+        parser.error("--speed, --batch-size and --http-timeout must be positive")
 
     if args.start_at and args.end_at and args.start_at > args.end_at:
         parser.error("--start-at must not be later than --end-at")
@@ -57,7 +62,40 @@ def main() -> None:
 
     dataset_start = telemetry[0].event_time
 
-    client = httpx.Client(timeout=10)
+    client = httpx.Client(timeout=args.http_timeout)
+    wall_start = None
+    metrics = {"completed": False, "speed": args.speed, "http_timeout_s": args.http_timeout,
+               "expected_points": len(telemetry), "vehicles": len({r.tr_id for r in telemetry}),
+               "dataset_span_s": (telemetry[-1].event_time - dataset_start).total_seconds(),
+               "requests": []}
+
+    def save_metrics():
+        if args.metrics_output:
+            Path(args.metrics_output).write_text(json.dumps(metrics, indent=2))
+
+    def post(path, payload=None, event_time=None):
+        started = time.monotonic()
+        entry = {"path": path, "started_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+                 "records": len(payload.get("records", [])) if payload else 0}
+        if event_time is not None:
+            entry["event_time"] = event_time.isoformat()
+            expected = (event_time - dataset_start).total_seconds() / args.speed
+            entry["behind_before_s"] = max(0, started - wall_start - expected)
+        try:
+            response = client.post(f"{args.backend}{path}", json=payload)
+            entry["status"] = response.status_code
+            response.raise_for_status()
+            return response
+        except Exception as exc:
+            entry["error"] = type(exc).__name__
+            raise
+        finally:
+            entry["elapsed_s"] = time.monotonic() - started
+            if event_time is not None:
+                entry["behind_after_s"] = max(0, time.monotonic() - wall_start - expected)
+            metrics["requests"].append(entry)
+            if "error" in entry:
+                save_metrics()
 
     schedule_payload = {
         "stops": [
@@ -74,13 +112,13 @@ def main() -> None:
             for s in schedule
         ]
     }
-    r = client.post(f"{args.backend}/ingest/schedule", json=schedule_payload)
+    r = post("/ingest/schedule", schedule_payload)
     r.raise_for_status()
     print(f"schedule ingested: {r.json()}")
 
     # Start the clock only after the full schedule has been persisted.
     wall_start = time.monotonic()
-    r = client.post(f"{args.backend}/ingest/replay-clock", json={"start": csv_timestamp(dataset_start), "speed": args.speed})
+    r = post("/ingest/replay-clock", {"start": csv_timestamp(dataset_start), "speed": args.speed})
     r.raise_for_status()
 
     batch: list[dict] = []
@@ -107,19 +145,24 @@ def main() -> None:
         )
         now_wall = time.monotonic()
         if len(batch) >= args.batch_size or (batch and now_wall - last_flush_wall >= flush_interval_s):
-            client.post(f"{args.backend}/ingest/telemetry", json={"records": batch}).raise_for_status()
+            post("/ingest/telemetry", {"records": batch}, last_event_time).raise_for_status()
             print(f"telemetry flushed: {len(batch)} points (last event_time={last_event_time.isoformat()})")
             batch.clear()
             last_flush_wall = now_wall
 
     if batch:
-        client.post(f"{args.backend}/ingest/telemetry", json={"records": batch}).raise_for_status()
+        post("/ingest/telemetry", {"records": batch}, last_event_time).raise_for_status()
         print(f"telemetry flushed: {len(batch)} points (final)")
 
+    metrics["playback_elapsed_s"] = time.monotonic() - wall_start
+    metrics["actual_speed"] = metrics["dataset_span_s"] / metrics["playback_elapsed_s"]
     if args.pause_at_end:
         time.sleep(2)  # let the asynchronous telemetry worker drain the final batch
-        client.post(f"{args.backend}/ingest/replay-clock/pause").raise_for_status()
+        post("/ingest/replay-clock/pause").raise_for_status()
 
+    metrics["completed"] = True
+    save_metrics()
+    client.close()
     print("replay complete")
 
 
