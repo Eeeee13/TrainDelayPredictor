@@ -4,7 +4,7 @@ const EARTH_RADIUS_M = 6371000;
 /** First and last shape point closer than this are treated as a closed loop. */
 const LOOP_CLOSURE_THRESHOLD_M = 30;
 
-function haversineMeters(a: LatLng, b: LatLng): number {
+export function haversineMeters(a: LatLng, b: LatLng): number {
   const toRad = (d: number) => (d * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);
   const dLng = toRad(b.lng - a.lng);
@@ -50,7 +50,9 @@ export function distanceAlongShape(geometry: ShapeGeometry, segmentIndex: number
 /** Inverse of the above: the point and direction of travel at a given arc-length distance. */
 export function pointAtDistance(geometry: ShapeGeometry, distanceMeters: number): { point: LatLng; bearing: number } {
   const { points, cumulative, totalLength } = geometry;
-  const d = Math.min(Math.max(distanceMeters, 0), totalLength);
+  const d = geometry.isLoop && totalLength > 0
+    ? ((distanceMeters % totalLength) + totalLength) % totalLength
+    : Math.min(Math.max(distanceMeters, 0), totalLength);
 
   let i = 1;
   while (i < cumulative.length - 1 && cumulative[i] < d) i++;

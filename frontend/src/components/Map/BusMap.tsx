@@ -8,7 +8,7 @@ import { useDashboardStore } from "@/store/dashboardStore";
 import type { RiskLevel, RouteDef, TrailPoint, Vehicle } from "@/domain/types";
 import { getBusVariant, BusVariant } from "@/utils/busVariant";
 import { buildShapeByVehicleId } from "@/utils/routeShapeLookup";
-import { setVehicleTargets, getRenderedPosition } from "@/utils/vehicleAnimator";
+import { setVehicleTargets, getRenderedPosition, resetVehicleAnimations } from "@/utils/vehicleAnimator";
 import { BusTopIcon } from "./BusTopIcon";
 import { useHighRiskNotifications } from "./Notifications";
 
@@ -248,13 +248,13 @@ export function BusMap() {
       map.addSource("trails", { type: "geojson", data: empty() });
       map.addLayer({
         id: "trails-halo", type: "line", source: "trails",
-        layout: { "line-cap": "round", "line-join": "round" },
+        layout: { "visibility": "none", "line-cap": "round", "line-join": "round" },
         paint: { "line-color": "#ffffff", "line-width": 9, "line-opacity": 0.9 },
         filter: ["==", ["get", "problem"], true]
       });
       map.addLayer({
         id: "trails", type: "line", source: "trails",
-        layout: { "line-cap": "round", "line-join": "round" },
+        layout: { "visibility": "none", "line-cap": "round", "line-join": "round" },
         paint: {
           "line-color": ["get", "color"],
           "line-width": ["case", ["get", "problem"], 5, 3],
@@ -329,11 +329,10 @@ export function BusMap() {
       const visibleIds = new Set(visible.map(v => v.id));
       (map.getSource("forecast") as maplibregl.GeoJSONSource).setData(forecastFeatures(routes.filter(r => visibleIds.has(r.vehicleId)), vehicles, selected));
 
-      // Vehicle *positions* are driven by the rAF loop further down, not
-      // here — this effect only hands it the latest snapshot to animate
-      // towards, so a slow polling interval never causes a visible jump.
+      // Presentation changes update the frame inputs; only fresh telemetry
+      // in the separate effect below may advance animation targets.
       frameInputs.current = { visible, selected, zoom };
-      setVehicleTargets(visible, shapeByVehicleId, Date.now());
+
 
       const activeVehicles = visible.map(v => v.id).sort().join("|");
       if (activeVehicles !== fittedVehicles.current && visible.length) {
@@ -354,6 +353,10 @@ export function BusMap() {
     if (map.isStyleLoaded()) update(); else map.once("load", update);
   }, [visible, visibleRiskTrails, riskTrails, routes, vehicles, selected, zoom, shapeByVehicleId]);
 
+  useEffect(() => {
+    setVehicleTargets(Object.values(vehicles), shapeByVehicleId, performance.now());
+  }, [vehicles, shapeByVehicleId]);
+
   // Smooth per-frame interpolation along each vehicle's route shape, decoupled
   // from however often fresh snapshots actually arrive (see vehicleAnimator).
   useEffect(() => {
@@ -362,7 +365,7 @@ export function BusMap() {
       const map = mapRef.current;
       if (map?.getSource("vehicles")) {
         const { visible, selected, zoom } = frameInputs.current;
-        const now = Date.now();
+        const now = performance.now();
         const features: GeoJSON.Feature[] = visible.map(v => {
           const rendered = getRenderedPosition(v.id, v.position, now);
           let bearing = rendered.bearing ?? v.bearing ?? 0;
@@ -390,7 +393,7 @@ export function BusMap() {
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+    return () => { cancelAnimationFrame(frame); resetVehicleAnimations(); };
   }, []);
 
   useEffect(() => {
