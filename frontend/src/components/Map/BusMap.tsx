@@ -303,7 +303,7 @@ export function BusMap() {
             properties: {
               id: v.id,
               label: zoom >= LABEL_ZOOM_THRESHOLD ? v.garageNumber : undefined,
-              color: v.risk ? colors[v.risk] : DEFAULT_TRAIL_COLOR,
+              color: v.risk ? colors[v.risk] : colors.unknown,
               riskKey: v.risk || "unknown",
               variant: getBusVariant(v.id),
               bearing: bearing,
