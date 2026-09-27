@@ -20,7 +20,13 @@ export function BusList() {
         const q = filters.query.trim().toLowerCase();
         return !q || `${v.id} ${v.garageNumber} ${v.routeId}`.toLowerCase().includes(q);
       })
-      .sort((a, b) => (b.predictedDelaySeconds ?? -Infinity) - (a.predictedDelaySeconds ?? -Infinity));
+      .sort((a, b) => {
+        const riskOrder = { high: 0, medium: 1, low: 2 };
+        const aRisk = a.risk !== null ? riskOrder[a.risk] : 3;
+        const bRisk = b.risk !== null ? riskOrder[b.risk] : 3;
+        if (aRisk !== bRisk) return aRisk - bRisk;
+        return (b.predictedDelaySeconds ?? -Infinity) - (a.predictedDelaySeconds ?? -Infinity);
+      });
   }, [vehicles, filters]);
 
   return (

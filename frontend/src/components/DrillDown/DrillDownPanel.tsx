@@ -33,7 +33,6 @@ export function DrillDownPanel() {
           <div className="text-sm font-semibold text-gray-800 truncate">
             Борт №{vehicle.garageNumber}
           </div>
-          <div className="text-xs text-gray-600 truncate">Маршрут {route?.shortName}</div>
         </div>
         <button
           onClick={() => selectVehicle(null)}
@@ -43,6 +42,18 @@ export function DrillDownPanel() {
           ✕
         </button>
       </div>
+
+      {(vehicle.risk === "high" || vehicle.risk === "medium") && (
+        <div
+          className={`px-4 py-2 border-b text-xs font-semibold uppercase tracking-wide ${
+            vehicle.risk === "high"
+              ? "bg-risk-high/10 border-risk-high/20 text-risk-high"
+              : "bg-risk-mid/10 border-risk-mid/20 text-risk-mid"
+          }`}
+        >
+          {vehicle.risk === "high" ? "Инцидент: высокий риск опоздания" : "Инцидент: средний риск опоздания"}
+        </div>
+      )}
 
       <div className="px-4 py-3 grid grid-cols-2 gap-2">
         <div className="rounded-xl bg-gray-100 px-3 py-2">
@@ -78,6 +89,11 @@ export function DrillDownPanel() {
         <div className="text-xs text-gray-600 mt-1">
           {vehicle.targetTime ? `Плановое прибытие: ${new Date(vehicle.targetTime).toLocaleString("ru-RU")}` : "Прогноз появится при входе в горизонт 10–15 минут"}
         </div>
+        {(vehicle.risk === "high" || vehicle.risk === "medium") && (
+          <div className="text-xs text-gray-600 mt-1">
+            Причина: {vehicle.reason ?? "не определена моделью"}
+          </div>
+        )}
       </div>
 
       <div className="px-4 py-3 border-t border-gray-200">

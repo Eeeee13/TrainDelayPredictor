@@ -38,6 +38,7 @@ export interface RiskAssessment {
   delay_probability?: number | null;
   risk_level: RiskLevel;
   source: string;
+  reason?: string;
 }
 
 export interface Vehicle {
@@ -55,7 +56,14 @@ export interface Vehicle {
   targetStopId: string | null;
   targetTime: string | null;
   source: string | null;
+  reason: string | null;
   bearing?: number; // Direction in degrees (0-360, 0 = North)
+}
+
+export interface TrailPoint extends LatLng {
+  risk: RiskLevel | null;
+  t: number;
+  gap?: boolean;
 }
 
 export interface DashboardFilters {

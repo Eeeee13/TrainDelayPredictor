@@ -28,7 +28,8 @@ export async function fetchDashboard(): Promise<{vehicles: Vehicle[]; routes: Ro
       delayProbability: v.risk?.delay_probability ?? null,
       delaySeconds: v.cur_dev_s, predictedDelaySeconds: v.risk?.predicted_delay_s ?? null,
       risk: v.risk?.risk_level ?? null, targetStopId: v.risk ? String(v.risk.target_stop_id) : null,
-      targetTime: v.risk ? utc(v.risk.target_time_begin) : null, source: v.risk?.source ?? null
+      targetTime: v.risk ? utc(v.risk.target_time_begin) : null, source: v.risk?.source ?? null,
+      reason: v.risk?.reason ?? null
     }))
   };
 }

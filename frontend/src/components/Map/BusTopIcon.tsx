@@ -1,10 +1,11 @@
 import { RiskLevel } from "@/domain/types";
 import { getBusVariant, BusVariant } from "@/utils/busVariant";
 
-const RISK_COLOR: Record<RiskLevel, string> = {
+const RISK_COLOR: Record<string, string> = {
   low: "#30d158",
   medium: "#ffd60a",
   high: "#ff453a",
+  unknown: "#8e8e93"
 };
 
 interface Props {
