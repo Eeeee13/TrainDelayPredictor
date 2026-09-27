@@ -8,7 +8,7 @@ import { useDashboardStore } from "@/store/dashboardStore";
 import type { RiskLevel, RouteDef, TrailPoint, Vehicle } from "@/domain/types";
 import { getBusVariant, BusVariant } from "@/utils/busVariant";
 import { buildShapeByVehicleId } from "@/utils/routeShapeLookup";
-import { snapPositionForDisplay } from "@/utils/snapToRoute";
+import { setVehicleTargets, getRenderedPosition } from "@/utils/vehicleAnimator";
 import { BusTopIcon } from "./BusTopIcon";
 import { useHighRiskNotifications } from "./Notifications";
 
@@ -172,6 +172,10 @@ export function BusMap() {
     [routes, vehicles, routeShapes]
   );
 
+  // Latest snapshot for the rAF loop below to read — kept out of React state
+  // on purpose, see the animation effect.
+  const frameInputs = useRef<{ visible: Vehicle[]; selected: string | null; zoom: number }>({ visible: [], selected: null, zoom: 13 });
+
   useEffect(() => {
     if (!container.current) return;
     const map = new maplibregl.Map({
@@ -187,7 +191,6 @@ export function BusMap() {
     // A user-initiated drag always means "I want to look elsewhere" — stop
     // auto-following.
     map.on("dragstart", () => { followRef.current = false; });
-    // map.on("zoomstart", (e) => { if (e.originalEvent) followRef.current = false; }); // zoom will turn off following
     map.on("load", () => {
       map.addSource("heat", { type: "geojson", data: empty() });
       map.addLayer({
@@ -325,36 +328,13 @@ export function BusMap() {
       );
       const visibleIds = new Set(visible.map(v => v.id));
       (map.getSource("forecast") as maplibregl.GeoJSONSource).setData(forecastFeatures(routes.filter(r => visibleIds.has(r.vehicleId)), vehicles, selected));
-      (map.getSource("vehicles") as maplibregl.GeoJSONSource).setData({
-        type: "FeatureCollection",
-        features: visible.map(v => {
-          // Calculate bearing from trail if not provided
-          let bearing = v.bearing ?? 0;
-          if (!v.bearing && v.trail.length >= 2) {
-            const last = v.trail[v.trail.length - 1];
-            const prev = v.trail[v.trail.length - 2];
-            const dy = last.lat - prev.lat;
-            const dx = last.lng - prev.lng;
-            bearing = (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360;
-          }
 
-          const displayPos = snapPositionForDisplay(v.position, shapeByVehicleId[v.id]);
+      // Vehicle *positions* are driven by the rAF loop further down, not
+      // here — this effect only hands it the latest snapshot to animate
+      // towards, so a slow polling interval never causes a visible jump.
+      frameInputs.current = { visible, selected, zoom };
+      setVehicleTargets(visible, shapeByVehicleId, Date.now());
 
-          return {
-            type: "Feature",
-            properties: {
-              id: v.id,
-              label: zoom >= LABEL_ZOOM_THRESHOLD ? v.garageNumber : undefined,
-              color: v.risk ? colors[v.risk] : DEFAULT_TRAIL_COLOR,
-              riskKey: v.risk || "unknown",
-              variant: getBusVariant(v.id),
-              bearing: bearing,
-              selected: v.id === selected
-            },
-            geometry: { type: "Point", coordinates: [displayPos.lng, displayPos.lat] }
-          };
-        })
-      });
       const activeVehicles = visible.map(v => v.id).sort().join("|");
       if (activeVehicles !== fittedVehicles.current && visible.length) {
         const bounds = new maplibregl.LngLatBounds();
@@ -373,6 +353,45 @@ export function BusMap() {
     };
     if (map.isStyleLoaded()) update(); else map.once("load", update);
   }, [visible, visibleRiskTrails, riskTrails, routes, vehicles, selected, zoom, shapeByVehicleId]);
+
+  // Smooth per-frame interpolation along each vehicle's route shape, decoupled
+  // from however often fresh snapshots actually arrive (see vehicleAnimator).
+  useEffect(() => {
+    let frame: number;
+    const tick = () => {
+      const map = mapRef.current;
+      if (map?.getSource("vehicles")) {
+        const { visible, selected, zoom } = frameInputs.current;
+        const now = Date.now();
+        const features: GeoJSON.Feature[] = visible.map(v => {
+          const rendered = getRenderedPosition(v.id, v.position, now);
+          let bearing = rendered.bearing ?? v.bearing ?? 0;
+          if (rendered.bearing === null && !v.bearing && v.trail.length >= 2) {
+            const last = v.trail[v.trail.length - 1];
+            const prev = v.trail[v.trail.length - 2];
+            bearing = (Math.atan2(last.lng - prev.lng, last.lat - prev.lat) * 180 / Math.PI + 360) % 360;
+          }
+          return {
+            type: "Feature",
+            properties: {
+              id: v.id,
+              label: zoom >= LABEL_ZOOM_THRESHOLD ? v.garageNumber : undefined,
+              color: v.risk ? colors[v.risk] : DEFAULT_TRAIL_COLOR,
+              riskKey: v.risk || "unknown",
+              variant: getBusVariant(v.id),
+              bearing,
+              selected: v.id === selected
+            },
+            geometry: { type: "Point", coordinates: [rendered.position.lng, rendered.position.lat] }
+          };
+        });
+        (map.getSource("vehicles") as maplibregl.GeoJSONSource).setData({ type: "FeatureCollection", features });
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   useEffect(() => {
     const { selectedVehicleId, vehicles: currentVehicles } = useDashboardStore.getState();
