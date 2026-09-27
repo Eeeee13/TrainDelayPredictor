@@ -37,6 +37,7 @@ export interface RiskAssessment {
   predicted_delay_s: number;
   risk_level: RiskLevel;
   source: string;
+  reason?: string;
 }
 
 export interface Vehicle {
@@ -53,6 +54,7 @@ export interface Vehicle {
   targetStopId: string | null;
   targetTime: string | null;
   source: string | null;
+  reason: string | null;
   bearing?: number; // Direction in degrees (0-360, 0 = North)
 }
 
