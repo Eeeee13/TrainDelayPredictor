@@ -19,12 +19,13 @@ export function DrillDownPanel() {
   const [reportError, setReportError] = useState<string | null>(null);
 
   if (!vehicle) return null;
+  const board = vehicle;
 
-  async function generateReport() {
+  const generateReport = async () => {
     setReportState("loading");
     setReportError(null);
     try {
-      const response = await fetch(`/vehicles/${encodeURIComponent(vehicle.id)}/report`, { method: "POST" });
+      const response = await fetch(`/vehicles/${encodeURIComponent(board.id)}/report`, { method: "POST" });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
         throw new Error(body?.detail ?? `HTTP ${response.status}`);
@@ -33,7 +34,7 @@ export function DrillDownPanel() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `report-${vehicle.id}.pdf`;
+      link.download = `report-${board.id}.pdf`;
       link.click();
       URL.revokeObjectURL(url);
       setReportState("idle");
@@ -41,7 +42,7 @@ export function DrillDownPanel() {
       setReportState("error");
       setReportError(error instanceof Error ? error.message : "Не удалось сформировать отчёт");
     }
-  }
+  };
 
   const variant = getBusVariant(vehicle.id);
   const busFrontImage = variant === "v1" ? busV1Front : busV2Front;
