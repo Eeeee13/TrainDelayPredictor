@@ -72,3 +72,25 @@ async def test_resilient_client_passes_through_primary_success():
     [result] = await client.predict_batch([_item()])
     assert result.source == PredictionSource.MODEL
     assert result.predicted_delay_s == 42.0
+
+
+async def test_read_timeout_is_not_retried_even_with_retry_budget():
+    import httpx
+
+    class SlowClient(InferenceClient):
+        calls = 0
+
+        async def predict_batch(self, items):
+            self.calls += 1
+            raise httpx.ReadTimeout("still computing")
+
+    primary = SlowClient()
+    client = ResilientInferenceClient(
+        primary, HeuristicFallbackInferenceClient(), max_retries=2,
+        fail_threshold=2, cooldown_s=999,
+    )
+    for _ in range(3):
+        [result] = await client.predict_batch([_item(150)])
+        assert result.source == PredictionSource.FALLBACK
+        assert result.predicted_delay_s == 150
+    assert primary.calls == 2  # One per batch, then the circuit blocks the third.
