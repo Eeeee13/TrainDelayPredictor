@@ -33,7 +33,7 @@ export interface SnapResult {
  * rather than raw degrees, so results stay correct across a whole city
  * despite longitude degrees shrinking with latitude.
  */
-export function snapToLine(pos: LatLng, line: LatLng[]): SnapResult | null {
+export function snapToLine(pos: LatLng, line: LatLng[], accept: (candidate: SnapResult) => boolean = () => true): SnapResult | null {
   if (line.length < 2) return null;
 
   const p = toLocalXY(pos, pos.lat);
@@ -54,7 +54,7 @@ export function snapToLine(pos: LatLng, line: LatLng[]): SnapResult | null {
     const distanceMeters = Math.hypot(dx, dy);
 
     if (!best || distanceMeters < best.distanceMeters) {
-      best = {
+      const candidate: SnapResult = {
         point: {
           lat: line[i].lat + t * (line[i + 1].lat - line[i].lat),
           lng: line[i].lng + t * (line[i + 1].lng - line[i].lng),
@@ -63,6 +63,7 @@ export function snapToLine(pos: LatLng, line: LatLng[]): SnapResult | null {
         segmentIndex: i,
         t,
       };
+      if (accept(candidate)) best = candidate;
     }
   }
 
