@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useDashboardStore } from "@/store/dashboardStore";
 import { getBusVariant } from "@/utils/busVariant";
 import busV1Front from "../../assets/bus-v1-front.png";
@@ -12,8 +13,33 @@ export function DrillDownPanel() {
     vehicle ? s.routes.find((r) => r.id === vehicle.routeId) : undefined
   );
   const selectVehicle = useDashboardStore((s) => s.selectVehicle);
+  const [reportState, setReportState] = useState<"idle" | "loading" | "error">("idle");
+  const [reportError, setReportError] = useState<string | null>(null);
 
   if (!vehicle) return null;
+
+  async function generateReport() {
+    setReportState("loading");
+    setReportError(null);
+    try {
+      const response = await fetch(`/vehicles/${encodeURIComponent(vehicle.id)}/report`, { method: "POST" });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.detail ?? `HTTP ${response.status}`);
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `report-${vehicle.id}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setReportState("idle");
+    } catch (error) {
+      setReportState("error");
+      setReportError(error instanceof Error ? error.message : "Не удалось сформировать отчёт");
+    }
+  }
 
   const variant = getBusVariant(vehicle.id);
   const busFrontImage = variant === "v1" ? busV1Front : busV2Front;
@@ -23,24 +49,24 @@ export function DrillDownPanel() {
 
   return (
     <div className="pointer-events-auto h-full w-[320px] rounded-2xl bg-white/90 backdrop-blur-xl border border-white/[0.06] dark:border-white/[0.06] border-gray-200 shadow-panel flex flex-col overflow-hidden animate-[fadeIn_0.15s_ease-out]">
-      <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-gray-200">
-        <img 
-          src={busFrontImage} 
-          alt={`Bus ${vehicle.garageNumber}`} 
-          className="w-20 h-16 object-contain flex-shrink-0" 
+      <div className="relative h-[132px] overflow-hidden border-b border-gray-200">
+        <img
+          src={busFrontImage}
+          alt=""
+          className="pointer-events-none absolute left-1/2 top-[42%] w-[188px] max-w-none -translate-x-1/2 -translate-y-1/2"
         />
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold text-gray-800 truncate">
-            Борт №{vehicle.garageNumber}
-          </div>
-        </div>
         <button
           onClick={() => selectVehicle(null)}
-          className="text-gray-600 hover:text-gray-800 text-sm leading-none px-1 flex-shrink-0"
+          className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-sm leading-none text-gray-700 shadow-sm"
           aria-label="Закрыть"
         >
           ✕
         </button>
+        <div className="absolute bottom-2 left-1/2 z-10 flex -translate-x-1/2 items-center rounded-[3px] border-2 border-black bg-white px-2 py-1 shadow-md">
+          <span className="text-[15px] font-bold leading-none tracking-wide text-black">
+            Борт №{vehicle.garageNumber}
+          </span>
+        </div>
       </div>
 
       {(vehicle.risk === "high" || vehicle.risk === "medium") && (
@@ -81,7 +107,20 @@ export function DrillDownPanel() {
         </div>
       </div>
 
-      <div className="px-4 py-3 border-t border-gray-200">
+      <div className="px-4 pb-3 border-b border-gray-200">
+        <button
+          type="button"
+          onClick={() => { void generateReport(); }}
+          disabled={reportState === "loading"}
+          className="w-full rounded-xl bg-gray-800 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+        >
+          {reportState === "loading" ? "Формируем отчёт…" : "Сгенерировать отчёт"}
+        </button>
+        {reportError && <p className="mt-2 text-xs text-risk-high">{reportError}</p>}
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+      <div className="px-4 py-3">
         <div className="text-[10px] uppercase text-gray-600 mb-1.5">Проблемный участок</div>
         <div className="text-sm  text-gray-800">
           {target ? `До остановки №${target.sequence}` : "Целевая остановка пока не определена"}
@@ -116,6 +155,7 @@ export function DrillDownPanel() {
             </div>
           ))}
         </div>
+      </div>
       </div>
     </div>
   );

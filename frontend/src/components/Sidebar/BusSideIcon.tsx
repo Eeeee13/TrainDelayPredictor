@@ -26,7 +26,7 @@ export function BusSideIcon({ risk, number, vehicleId }: Props) {
       <img 
         src={busImage} 
         alt={`Bus ${number}`} 
-        className="w-14 h-12 object-contain translate-x-4 pointer-events-none"
+        className="w-[4.55rem] h-[3.9rem] object-contain translate-x-4 pointer-events-none"
         style={{ transform: 'scaleX(1) translateX(-1.5rem) scale(1.5)' }}
       />
     </div>

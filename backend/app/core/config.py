@@ -4,6 +4,9 @@ number buried in a service.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -53,4 +56,22 @@ class Settings(BaseSettings):
     app_name: str = "predictor-backend"
 
 
+def _env_files() -> tuple[str, ...]:
+    """Backend cwd `.env` and the repo-root `.env`. Missing files are skipped."""
+    root = Path(__file__).resolve().parents[3]
+    candidates = (Path.cwd() / ".env", root / ".env", root / "backend" / ".env")
+    return tuple(str(path) for path in candidates if path.is_file())
+
+
+class YandexSettings(BaseSettings):
+    """Yandex AI Studio credentials. The API key is never given a default."""
+
+    model_config = SettingsConfigDict(env_file=_env_files(), extra="ignore")
+
+    api_key: str = Field(default="", validation_alias="YANDEX_CLOUD_API_KEY")
+    folder: str = Field(default="b1gv2rfr13cpst5o42jr", validation_alias="YANDEX_CLOUD_FOLDER")
+    model: str = Field(default="deepseek-v4-flash/latest", validation_alias="YANDEX_CLOUD_MODEL")
+
+
 settings = Settings()
+yandex_settings = YandexSettings()
