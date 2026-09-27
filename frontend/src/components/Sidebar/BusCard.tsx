@@ -41,6 +41,11 @@ export function BusCard({ vehicle, route, selected, onSelect }: Props) {
           </span>
         </div>
         <div className="text-xs text-gray-600 truncate">{vehicle.risk ? RISK_TEXT[vehicle.risk] : "Ожидает прогноза"}</div>
+        {vehicle.delayProbability != null && (
+          <div className="text-[10px] text-gray-600 tabular-nums mt-0.5">
+            Вероятность &gt;2 мин: {Math.round(vehicle.delayProbability * 100)}%
+          </div>
+        )}
       </div>
       {minutes > 0 && (
         <div className="text-xs font-semibold text-risk-high tabular-nums shrink-0">

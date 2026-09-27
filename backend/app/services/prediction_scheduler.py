@@ -1,28 +1,4 @@
-"""PredictionScheduler: decides *when* to call the ML model.
-
-This is the answer to "not by timer, not on arrival, but by a calendar of
-forecast moments derived from the schedule":
-
-  * Every stop still ahead of a vehicle has a known `target_time_begin`
-    from the reference schedule.
-  * The moment `target_time_begin - now` first falls inside
-    [horizon_min_s, horizon_max_s] (15..10 minutes out), that (tr_id,
-    target_stop_id) pair becomes *due* and gets exactly one "first"
-    prediction — this is the early warning, fired as early as the window
-    allows.
-  * A safety-net recompute runs every ~60s, but only refreshes pairs that
-    already got their first prediction and are currently HIGH risk, and
-    only while the event is still in the future. It never creates a new
-    "first" alert and never fires after the event would already have
-    happened (no forecasts issued after the fact).
-  * A telemetry gap can make a vehicle miss the ideal window; if so we
-    still fire once, as long as the event genuinely hasn't happened yet
-    (>= late_fire_floor_s away), rather than silently giving up.
-
-Idempotency is enforced in-memory (StateCache._predicted_pairs) since this
-scheduler is the sole writer running on a single asyncio task — no
-distributed locking needed at this scale.
-"""
+"""Schedule first and high-risk repeat predictions strictly in (T+10, T+15] minutes."""
 from __future__ import annotations
 
 import datetime as dt
@@ -150,6 +126,7 @@ class PredictionScheduler:
                         source=result.source.value,
                         is_safety_recompute=candidate.is_safety_recompute,
                         model_version=result.model_version,
+                        delay_probability=result.delay_probability,
                     )
                 )
 
@@ -192,17 +169,4 @@ class PredictionScheduler:
                         candidates.append(_Candidate(state, target, is_safety_recompute=True))
                 continue
 
-            # Missed-window fallback (see module docstring): a telemetry gap
-            # can make a vehicle skip past the ideal [10,15] min window
-            # without ever getting its "first" prediction for a stop. Fire
-            # once for the nearest still-unpredicted stop, as long as the
-            # event genuinely hasn't happened yet.
-            late = sorted(
-                (s for s in stops
-                 if settings.late_fire_floor_s <= (s.scheduled_time - now).total_seconds() <= settings.horizon_min_s
-                 and not self._state.already_predicted(state.tr_id, s.stop_id)),
-                key=lambda s: (s.scheduled_time, s.seq),
-            )
-            if late:
-                candidates.append(_Candidate(state, late[0], is_safety_recompute=False))
         return candidates

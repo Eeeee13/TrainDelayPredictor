@@ -92,6 +92,7 @@ class PredictResult:
     confidence: float | None
     source: PredictionSource
     model_version: str | None = None
+    delay_probability: float | None = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -106,6 +107,7 @@ class RiskAssessment:
     reason: str
     source: PredictionSource
     confidence: float | None = None
+    delay_probability: float | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -119,4 +121,5 @@ class RiskAssessment:
             "reason": self.reason,
             "source": self.source.value,
             "confidence": self.confidence,
+            "delay_probability": self.delay_probability,
         }

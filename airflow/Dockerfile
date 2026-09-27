@@ -7,4 +7,6 @@ RUN pip install --no-cache-dir 'lightgbm>=4.0' 'pandas>=2.0' 'numpy>=1.24' 'scik
 COPY --chown=airflow:root airflow/dags /opt/airflow/dags
 COPY --chown=airflow:root ml_pipeline /opt/airflow/ml_pipeline
 COPY --chown=airflow:root training /opt/airflow/training
+COPY --chown=airflow:root model /opt/airflow/model
+ENV DEFAULT_MODEL=/opt/airflow/model/model.txt
 ENV PYTHONPATH=/opt/airflow

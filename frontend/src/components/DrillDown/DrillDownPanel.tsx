@@ -73,6 +73,11 @@ export function DrillDownPanel() {
           >
             {minutes > 0 ? `+${minutes}` : minutes} мин
           </div>
+          {vehicle.delayProbability != null && (
+            <div className="text-[10px] text-gray-600 tabular-nums mt-0.5">
+              Вероятность &gt;2 мин: {Math.round(vehicle.delayProbability * 100)}%
+            </div>
+          )}
         </div>
       </div>
 

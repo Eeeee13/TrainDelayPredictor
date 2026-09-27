@@ -25,6 +25,7 @@ export async function fetchDashboard(): Promise<{vehicles: Vehicle[]; routes: Ro
     vehicles: data.vehicles.map((v) => ({
       id: v.vehicle_id, routeId: String(v.tr_id), garageNumber: String(v.tr_id),
       position: v.position, trail: v.trail ?? [], speedKmh: v.speed_kmh, lastUpdate: utc(v.event_time),
+      delayProbability: v.risk?.delay_probability ?? null,
       delaySeconds: v.cur_dev_s, predictedDelaySeconds: v.risk?.predicted_delay_s ?? null,
       risk: v.risk?.risk_level ?? null, targetStopId: v.risk ? String(v.risk.target_stop_id) : null,
       targetTime: v.risk ? utc(v.risk.target_time_begin) : null, source: v.risk?.source ?? null,

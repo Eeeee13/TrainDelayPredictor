@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     # --- ML inference ---------------------------------------------------
     inference_url: str = "http://inference:8000/predict"
-    inference_timeout_s: float = 10.0
+    inference_timeout_s: float = 2.0
     inference_max_retries: int = 1
     inference_circuit_cooldown_s: float = 15.0
     inference_circuit_fail_threshold: int = 3
@@ -34,11 +34,6 @@ class Settings(BaseSettings):
     # --- Forecast horizon (hard requirement: strictly 10-15 minutes) ----
     horizon_min_s: int = 600   # 10 min - closest allowed lead time
     horizon_max_s: int = 900   # 15 min - earliest allowed lead time (fire point)
-    # if a target stop's window was missed entirely (e.g. telemetry gap),
-    # still fire once as long as the event hasn't happened yet, but keep
-    # a floor so we never predict something already in the past.
-    late_fire_floor_s: int = 30
-
     # --- Scheduling -------------------------------------------------
     scheduler_tick_s: float = 5.0
     safety_recompute_interval_s: float = 60.0

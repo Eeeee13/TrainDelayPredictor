@@ -111,3 +111,24 @@ async def test_selects_first_stop_in_strict_horizon(sqlite_session_factory):
     scheduler._state.put_vehicle(VehicleState(vehicle_id="bus-1", tr_id=1, cur_dev_s=100, last_event_time=now))
     assert await scheduler.tick(now) == 1
     assert scheduler._state.get_risk("bus-1").target_stop_id == 102
+
+
+@pytest.mark.parametrize('lead,expected', [(30,0),(599,0),(600,0),(601,1),(900,1),(901,0)])
+async def test_strict_boundaries_even_with_fallback(sqlite_session_factory, lead, expected):
+    now = dt.datetime.utcnow()
+    await _seed_stop(sqlite_session_factory,1,101,1,now+dt.timedelta(seconds=lead))
+    scheduler=await _make_scheduler(sqlite_session_factory)
+    scheduler._state.put_vehicle(VehicleState(vehicle_id='bus-1',tr_id=1,cur_dev_s=310,last_event_time=now))
+    assert await scheduler.tick(now)==expected
+    if expected:
+        assert scheduler._state.get_risk('bus-1').delay_probability is None
+
+
+async def test_high_risk_does_not_recompute_after_window(sqlite_session_factory):
+    now=dt.datetime.utcnow()
+    await _seed_stop(sqlite_session_factory,1,101,1,now+dt.timedelta(seconds=660))
+    scheduler=await _make_scheduler(sqlite_session_factory)
+    state=VehicleState(vehicle_id='bus-1',tr_id=1,cur_dev_s=310,last_event_time=now)
+    scheduler._state.put_vehicle(state)
+    assert await scheduler.tick(now)==1
+    assert await scheduler.tick(now+dt.timedelta(seconds=60))==0

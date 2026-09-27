@@ -19,8 +19,10 @@ import pandas as pd
 
 try:
     from .features import build, clean_traffic, load_schedule, predict
+    from .probability import DelayProbability
 except ImportError:  # running as a script from this directory
     from features import build, clean_traffic, load_schedule, predict
+    from probability import DelayProbability
 
 _RAW_COLUMNS = ["event_time", "location_valid", "lon", "lat", "speed"]
 
@@ -36,6 +38,12 @@ class DelayPredictor:
     def __init__(self, model_path: str | Path | None = None):
         path = Path(model_path) if model_path else Path(__file__).with_name("model.txt")
         self.model = lgb.Booster(model_file=str(path))
+        import json
+        meta = path.parent / "metadata.json"
+        required = meta.exists() and json.loads(meta.read_text()).get("bundle_version", 1) >= 2
+        self.probability = DelayProbability.load(path.parent, required=required)
+        if self.probability and self.probability.calibration["features"] != self.model.feature_name():
+            raise ValueError("regressor/classifier feature mismatch")
         self.sched: dict = {}
         self._raw: dict[int, pd.DataFrame] = {}
 
@@ -112,3 +120,9 @@ class DelayPredictor:
         """Batch predict. `points` needs tr_id, T, target_stop_id, target_time_begin, cur_dev_s."""
         X = build(points, self.sched, self._traffic())
         return predict(self.model, X)
+
+    def predict_points_with_probability(self, points: pd.DataFrame):
+        X = build(points, self.sched, self._traffic())
+        delays = predict(self.model, X)
+        probabilities = self.probability.predict(X) if self.probability else [None] * len(X)
+        return delays, probabilities

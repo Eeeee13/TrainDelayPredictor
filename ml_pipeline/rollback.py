@@ -4,6 +4,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from ml_pipeline.registry import publication_lock
+from model.probability import validate_bundle
 from pathlib import Path
 
 
@@ -17,10 +19,14 @@ def main() -> None:
     metadata = root / version / "metadata.json"
     if not model.is_file() or not metadata.is_file():
         parser.error(f"unknown model version: {version}")
-    content = json.loads(metadata.read_text())
-    temp = root / "active.tmp"
-    temp.write_text(json.dumps(content))
-    os.replace(temp, root / "active.json")
+    with publication_lock(root):
+        content = json.loads(metadata.read_text())
+        if content.get("version") != version:
+            parser.error("metadata version mismatch")
+        validate_bundle(root / version, required=content.get("bundle_version", 1) >= 2)
+        temp = root / "active.tmp"
+        temp.write_text(json.dumps(content))
+        os.replace(temp, root / "active.json")
     print(version)
 
 
